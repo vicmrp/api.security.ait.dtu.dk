@@ -13,7 +13,42 @@ from .scripts.graph_apicall_deletesoftwaremfa import delete_software_mfa_method 
 
 def execute_hunting_query(query):
     response, status_code = run_hunting_query(query)
-    return response.json(), status_code
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {"raw_response": response.text}
+    return payload, status_code
+
+
+def _escape_kql_string(value: str) -> str:
+    """Return a value safely escaped for inclusion in a single-quoted KQL string."""
+    return value.replace("'", "''")
+
+
+def execute_identity_logon_events(account_upn: str, lookback_window: str) -> tuple[dict, int]:
+    """Execute an IdentityLogonEvents hunting query for the given UPN."""
+
+    lookback = lookback_window.strip() if lookback_window else "7d"
+    if not lookback:
+        lookback = "7d"
+
+    escaped_upn = _escape_kql_string(account_upn.strip())
+    query = (
+        f"let accountUpn = '{escaped_upn}';\n"
+        f"let lookback = {lookback};\n"
+        "IdentityLogonEvents\n"
+        "| where Timestamp >= ago(lookback)\n"
+        "| where tolower(AccountUpn) == tolower(accountUpn)\n"
+        "| sort by Timestamp desc\n"
+    )
+
+    response, status_code = run_hunting_query(query)
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {"raw_response": response.text}
+    return payload, status_code
+
 
 def execute_get_user(user_principal_name, select_parameters):
     data, status_code = get_user(user_principal_name=user_principal_name, select_parameters=select_parameters)

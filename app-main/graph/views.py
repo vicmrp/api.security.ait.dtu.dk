@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
 
 from drf_yasg import openapi
@@ -16,6 +17,7 @@ from .serializers import QuerySerializer
 from .services import (
     execute_delete_software_mfa_method,
     execute_get_user,
+    execute_identity_logon_events,
     execute_hunting_query,
     execute_list_user_authentication_methods,
     execute_microsoft_authentication_method,
@@ -198,6 +200,103 @@ Response
         payload, status_code = execute_list_user_authentication_methods(
             user_id__or__user_principalname
         )
+        return Response(payload, status=status_code)
+
+
+class IdentityLogonEventsView(SecuredAPIView):
+    """Return IdentityLogonEvents for a given user."""
+
+    authorization_header = openapi.Parameter(
+        "Authorization",
+        in_=openapi.IN_HEADER,
+        description="Required. Must be in the format ''.",
+        type=openapi.TYPE_STRING,
+        required=True,
+        default="",
+    )
+
+    user_path_param = openapi.Parameter(
+        "user",
+        in_=openapi.IN_PATH,
+        description="The user principal name to query.",
+        type=openapi.TYPE_STRING,
+        required=True,
+        default="vicre@dtu.dk",
+        override=True,
+    )
+
+    lookback_param = openapi.Parameter(
+        "lookback",
+        in_=openapi.IN_QUERY,
+        description="Optional lookback window for the query (e.g. '7d', '48h'). Defaults to '7d'.",
+        type=openapi.TYPE_STRING,
+        required=False,
+    )
+
+    _LOOKBACK_PATTERN = re.compile(r"^\d+(?:\.\d+)?\s*(?:d|h|m)$", re.IGNORECASE)
+
+    @swagger_auto_schema(
+        manual_parameters=[authorization_header, user_path_param, lookback_param],
+        operation_description="""
+Fetch IdentityLogonEvents for the specified user within the provided lookback window.
+
+Microsoft Graph API documentation: https://learn.microsoft.com/en-us/graph/api/security-runs-huntingquery?view=graph-rest-1.0
+
+Curl example:
+```
+curl --location --request GET 'https://api.security.ait.dtu.dk/v1.0/graph/identitylogonevents/vicre%40dtu.dk?lookback=7d' \
+    --header 'Authorization: Token YOUR_API_KEY'
+```
+
+Response example:
+```
+{
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#microsoft.graph.security.huntingQueryResults",
+    "schema": [...],
+    "results": [...]
+}
+```
+""",
+        responses={
+            200: "Identity logon events retrieved",
+            400: "Error: Bad request",
+            404: "Error: Not found",
+            500: "Error: Internal server error",
+        },
+    )
+    def get(self, request, user: str) -> Response:
+        upn = (user or "").strip()
+        if not upn:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "User parameter cannot be empty.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        lookback = request.GET.get("lookback", "7d").strip()
+        if lookback and not self._LOOKBACK_PATTERN.fullmatch(lookback):
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Invalid lookback value. Use formats such as '7d', '24h', or '30m'.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payload, status_code = execute_identity_logon_events(upn, lookback or "7d")
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to fetch IdentityLogonEvents for %s", upn)
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Failed to fetch IdentityLogonEvents.",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         return Response(payload, status=status_code)
 
 
