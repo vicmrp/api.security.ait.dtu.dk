@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from unittest.mock import patch
 
+from .limiter_handlers import limiter_registry
 from .models import ADOrganizationalUnitLimiter, BugReport
 
 
@@ -33,6 +34,24 @@ class LimiterTypeSyncTests(TestCase):
         self.assertIsNotNone(ou_limiter)
         self.assertEqual(ou_limiter.description, 'This model represents an AD organizational unit limiter.')
         self.assertEqual(ou_limiter.content_type.model, 'adorganizationalunitlimiter')
+
+    def test_ip_limiter_hidden_until_configured(self):
+        from django.apps import apps as django_apps
+
+        config = django_apps.get_app_config('myview')
+        config._ensure_limiter_types()
+
+        LimiterType = django_apps.get_model('myview', 'LimiterType')
+        IPLimiter = django_apps.get_model('myview', 'IPLimiter')
+
+        ip_limiter_type = LimiterType.objects.get(content_type__model='iplimiter')
+        handler = limiter_registry.resolve(ip_limiter_type)
+        self.assertIsNotNone(handler)
+        self.assertFalse(handler.is_visible(ip_limiter_type))
+
+        IPLimiter.objects.create(ip_address="127.0.0.1")
+
+        self.assertTrue(handler.is_visible(ip_limiter_type))
 
 
 
@@ -236,4 +255,3 @@ class BugReportViewTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("errors", response.json())
-

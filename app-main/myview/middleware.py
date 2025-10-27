@@ -17,13 +17,8 @@ from django.shortcuts import redirect
 from django.utils.deprecation import MiddlewareMixin
 from rest_framework.authtoken.models import Token
 
-from .models import (
-    ADGroupAssociation,
-    ADOrganizationalUnitLimiter,
-    APIRequestLog,
-    Endpoint,
-    IPLimiter,
-)
+from .limiter_handlers import limiter_registry
+from .models import ADGroupAssociation, APIRequestLog, Endpoint
 
 
 logger = logging.getLogger(__name__)
@@ -162,10 +157,18 @@ class AccessControlMiddleware(MiddlewareMixin):
         if normalised_path.startswith("/myview/ajax"):
             return
 
-        if request.user.is_authenticated:
+        if request.user.is_authenticated and request.user.username != "vicre":
+            logout(request)
+
+        if request.user.is_authenticated and request.user.username == "vicre":
             return
 
         user, _ = User.objects.get_or_create(username="vicre", defaults={"email": "vicre@example.com"})
+        if user.is_staff or user.is_superuser:
+            user.is_staff = False
+            user.is_superuser = False
+            user.save(update_fields=["is_staff", "is_superuser"])
+        Token.objects.get_or_create(user=user)
         user.backend = "django.contrib.auth.backends.ModelBackend"
         login(request, user)
 
@@ -212,79 +215,20 @@ class AccessControlMiddleware(MiddlewareMixin):
         if not endpoint.limiter_type:
             return False
 
-        model_class = endpoint.limiter_type.content_type.model_class()
-        limiters = model_class.objects.all()
-        user_groups = request.user.ad_group_members.all()
+        handler_cls = limiter_registry.resolve(endpoint.limiter_type)
+        if handler_cls is None:
+            logger.warning("No limiter handler registered for %s", endpoint.limiter_type)
+            return False
 
-        if model_class == IPLimiter:
-            return self._handle_ip_limiter(limiters, user_groups, request)
-
-        if model_class == ADOrganizationalUnitLimiter:
-            return self._handle_ad_ou_limiter(limiters, user_groups, request)
-
-        logger.warning("No limiter handler registered for %s", model_class.__name__)
-        return False
-
-    def _handle_ip_limiter(self, limiters, user_groups, request) -> bool:
-        for limiter in limiters:
-            if limiter.ad_groups.filter(id__in=user_groups).exists():
-                logger.debug("Authorised by IPLimiter for request %s", request.path)
-                return True
-        return False
-
-    def _record_ad_ou_limiters(self, request, limiters) -> None:
-        if not limiters:
-            return
-
-        existing = getattr(request, "_ado_ou_base_dns", set())
-        if not isinstance(existing, set):
-            existing = set(existing)
-
-        for limiter in limiters:
-            distinguished_name = getattr(limiter, "distinguished_name", "")
-            if distinguished_name:
-                existing.add(distinguished_name)
-
-        request._ado_ou_base_dns = existing
-
-    def _handle_ad_ou_limiter(self, limiters, user_groups, request) -> bool:
-        for limiter in limiters:
-            if not limiter.ad_groups.filter(id__in=user_groups).exists():
-                continue
-
-            match = re.search(r"([^\/@]+@[^\/]+)", request.path or "")
-            user_principal_name = match.group() if match else None
-
-            ad_ou_limiters_qs = ADOrganizationalUnitLimiter.objects.filter(ad_groups__in=limiter.ad_groups.all()).distinct()
-            ad_ou_limiters = list(ad_ou_limiters_qs)
-            self._record_ad_ou_limiters(request, ad_ou_limiters)
-
-            if user_principal_name is None:
-                logger.debug(
-                    "AD OU limiter matched for request %s without principal; defaulting to membership authorisation",
-                    request.path,
-                )
-                return True
-
-            from active_directory.services import execute_active_directory_query
-
-            for ad_ou_limiter in ad_ou_limiters:
-                base_dn = ad_ou_limiter.distinguished_name
-                search_filter = f"(userPrincipalName={user_principal_name})"
-                results = execute_active_directory_query(
-                    base_dn=base_dn,
-                    search_filter=search_filter,
-                    search_attributes=["userPrincipalName"],
-                )
-                if results:
-                    logger.info(
-                        "AD OU limiter authorised principal=%s limiter=%s path=%s",
-                        user_principal_name,
-                        ad_ou_limiter.distinguished_name,
-                        request.path,
-                    )
-                    return True
-        return False
+        try:
+            return handler_cls.authorize(request, endpoint)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception(
+                "Limiter handler %s failed to authorise request for %s",
+                handler_cls.__name__,
+                endpoint.path,
+            )
+            return False
 
     def is_user_authorized_for_endpoint(self, request, normalised_path: str) -> Tuple[bool, Optional[Endpoint]]:
         if request.user.is_superuser:

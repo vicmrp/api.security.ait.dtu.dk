@@ -20,24 +20,22 @@ import importlib.util
 import io
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
+try:
+    from .models import UserActivityLog
+
+except ImportError:
+    print("UserActivityLog model is not available for registration in the admin site.")
+    UserActivityLog = None
+
+
+
+from .limiter_handlers import limiter_registry
 
 logger = logging.getLogger(__name__)
 
 
 
-try:
-    from .models import IPLimiter, UserActivityLog
-
-
-
-except ImportError:
-    print("IPLimiter model is not available for registration in the admin site.")
-    pass
-
-
-
-
-if 'UserActivityLog' in globals():
+if UserActivityLog is not None:
 
     @admin.register(UserActivityLog)
     class UserActivityLogAdmin(admin.ModelAdmin):
@@ -412,11 +410,12 @@ try:
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            limiter_choices = [("", "---------")] + [
-                (str(obj.pk), obj.name) for obj in LimiterType.objects.all()
-            ] + [
-                ("__none__", "<None> (clear limiter)")
-            ]
+            limiter_choices = [("", "---------")]
+            for obj in LimiterType.objects.all():
+                handler = limiter_registry.resolve(obj)
+                if handler and handler.is_selectable(obj):
+                    limiter_choices.append((str(obj.pk), obj.name))
+            limiter_choices.append(("__none__", "<None> (clear limiter)"))
             self.fields['limiter_type'].choices = limiter_choices
             self.fields['ad_groups'].queryset = ADGroupAssociation.objects.all()
 

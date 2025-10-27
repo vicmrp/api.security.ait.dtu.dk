@@ -40,15 +40,8 @@ from .forms import (
     LargeTextAreaForm,
     MfaResetLookupForm,
 )
-from .models import (
-    ADOrganizationalUnitLimiter,
-    ADGroupAssociation,
-    BugReport,
-    BugReportAttachment,
-    Endpoint,
-    MFAResetAttempt,
-    MFAResetRecord,
-)
+from .limiter_handlers import limiter_registry
+from .models import ADGroupAssociation, BugReport, BugReportAttachment, Endpoint, MFAResetAttempt, MFAResetRecord
 from .constants import NO_LIMIT_LIMITER_NAME
 from active_directory.services import execute_active_directory_query
 
@@ -368,37 +361,16 @@ class BaseView(View):
             })
 
         # Fetch Limiter Types that the user is associated with
-        from .models import LimiterType, IPLimiter, ADOrganizationalUnitLimiter
+        from .models import LimiterType
         associated_limiter_types = []
 
         for limiter_type in LimiterType.objects.all():
-            content_type = limiter_type.content_type
-
-            if content_type is None:
-                limiter_type_info = {
-                    'name': limiter_type.name,
-                    'description': limiter_type.description,
-                    'model': None,
-                    'canonical_names': None,
-                }
-                associated_limiter_types.append(limiter_type_info)
+            handler = limiter_registry.resolve(limiter_type)
+            if not handler or not handler.is_visible(limiter_type):
                 continue
-
-            if content_type.model == 'iplimiter':
-                limiters = IPLimiter.objects.filter(ad_groups__in=user_ad_group_ids).distinct()
-            elif content_type.model == 'adorganizationalunitlimiter':
-                limiters = ADOrganizationalUnitLimiter.objects.filter(ad_groups__in=user_ad_group_ids).distinct()
-            else:
-                limiters = IPLimiter.objects.none()
-
-            if limiters.exists():
-                limiter_type_info = {
-                    'name': limiter_type.name,
-                    'description': limiter_type.description,
-                    'model': content_type.model,
-                    'canonical_names': ', '.join(limiters.values_list('canonical_name', flat=True).distinct()) if content_type.model == 'adorganizationalunitlimiter' else None,
-                }
-                associated_limiter_types.append(limiter_type_info)
+            metadata = handler.get_user_metadata(limiter_type, self.request.user)
+            if metadata:
+                associated_limiter_types.append(metadata)
 
         from django.conf import settings
         context = {
