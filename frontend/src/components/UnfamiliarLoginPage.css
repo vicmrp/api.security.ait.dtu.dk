@@ -84,6 +84,29 @@
   background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
 }
 
+.token-status-banner {
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.token-status-banner.ready {
+  background: rgba(16, 185, 129, 0.16);
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.token-status-banner.missing {
+  background: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
 .signin-controls .input-group {
   display: flex;
   flex-direction: column;

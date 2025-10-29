@@ -8,6 +8,7 @@ import './UnfamiliarLoginPage.css';
 
 interface UnfamiliarLoginPageProps {
   accessToken?: string | null;
+  backendApiToken?: string | null;
   onClose: () => void;
 }
 
@@ -388,7 +389,7 @@ const locationLayer: Layer = {
 
 const DEFAULT_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
-const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, onClose }) => {
+const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, backendApiToken, onClose }) => {
   const [username, setUsername] = useState('');
   const [lookback, setLookback] = useState('7d');
   const [events, setEvents] = useState<SignInEvent[]>([]);
@@ -397,6 +398,17 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [activeUser, setActiveUser] = useState<string>('');
   const [activeLookback, setActiveLookback] = useState<string>('7d');
+
+  const effectiveAuthToken = useMemo(() => {
+    const manualToken = backendApiToken?.trim();
+    if (manualToken) {
+      return manualToken;
+    }
+    const azureToken = accessToken?.trim();
+    return azureToken && azureToken.length > 0 ? azureToken : null;
+  }, [backendApiToken, accessToken]);
+
+  const isUsingBackendToken = Boolean(backendApiToken?.trim());
 
   const mapRef = useRef<MapRef | null>(null);
 
@@ -460,8 +472,8 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       setError('Please enter a username to look up sign-ins.');
       return;
     }
-    if (!accessToken) {
-      setError('Azure AD access token missing. Please sign in again.');
+    if (!effectiveAuthToken) {
+      setError('API authorization token missing. Save a backend token on the dashboard before fetching.');
       return;
     }
 
@@ -474,10 +486,12 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       const endpoint = `${baseUrl}/graph/v1.0/identitylogonevents/${encodeURIComponent(targetUser)}`;
       const url = windowParam ? `${endpoint}?lookback=${encodeURIComponent(windowParam)}` : endpoint;
 
+      const tokenForHeader = /^Bearer\s+/i.test(effectiveAuthToken) ? effectiveAuthToken : `Bearer ${effectiveAuthToken}`;
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: tokenForHeader,
           'Content-Type': 'application/json'
         }
       });
@@ -539,6 +553,13 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
         </header>
 
         <form className="signin-controls" onSubmit={handleSubmit}>
+          <div className={`token-status-banner ${effectiveAuthToken ? 'ready' : 'missing'}`}>
+            {effectiveAuthToken
+              ? isUsingBackendToken
+                ? 'Using backend API token saved on the dashboard.'
+                : 'Using Azure AD access token.'
+              : 'No API token available. Save one on the dashboard to continue.'}
+          </div>
           <div className="input-group">
             <label htmlFor="signin-username">User Principal Name</label>
             <input
@@ -563,7 +584,11 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
               disabled={loading}
             />
           </div>
-          <button type="submit" className="submit-button" disabled={loading || !username.trim()}>
+          <button
+            type="submit"
+            className="submit-button"
+            disabled={loading || !username.trim() || !effectiveAuthToken}
+          >
             {loading ? 'Fetching…' : 'Load sign-ins'}
           </button>
         </form>

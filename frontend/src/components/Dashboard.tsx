@@ -8,6 +8,8 @@ import ResetMFAModal from './ResetMFAModal';
 import UnfamiliarLoginPage from './UnfamiliarLoginPage';
 import './Dashboard.css';
 
+const BACKEND_API_TOKEN_KEY = 'myview.backendApiToken';
+
 const Dashboard: React.FC = () => {
   // Use our custom authentication hook
   const { user, logout, isLoading, getAccessToken } = useAuth();
@@ -18,6 +20,10 @@ const Dashboard: React.FC = () => {
   const [showMFAModal, setShowMFAModal] = useState<boolean>(false);
   const [authStatus, setAuthStatus] = useState<'ready' | 'checking' | 'expired'>('checking');
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [backendApiToken, setBackendApiToken] = useState<string | null>(null);
+  const [tokenInput, setTokenInput] = useState('');
+  const [isTokenVisible, setIsTokenVisible] = useState(false);
+  const [tokenFeedback, setTokenFeedback] = useState<string | null>(null);
 
   // Check authentication status when component mounts
   useEffect(() => {
@@ -42,6 +48,28 @@ const Dashboard: React.FC = () => {
     checkAuthStatus();
   }, [user, getAccessToken]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const storedToken = window.localStorage.getItem(BACKEND_API_TOKEN_KEY);
+    if (storedToken) {
+      setBackendApiToken(storedToken);
+      setTokenInput(storedToken);
+    }
+  }, []);
+
+  const persistBackendToken = (token: string | null) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (token) {
+      window.localStorage.setItem(BACKEND_API_TOKEN_KEY, token);
+    } else {
+      window.localStorage.removeItem(BACKEND_API_TOKEN_KEY);
+    }
+  };
+
   // Handlers
   const handleSignOut = async () => {
     try {
@@ -65,6 +93,27 @@ const Dashboard: React.FC = () => {
       return;
     }
     setShowUnfamiliarLogin(true);
+  };
+
+  const handleTokenSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = tokenInput.trim();
+    if (trimmed) {
+      persistBackendToken(trimmed);
+      setBackendApiToken(trimmed);
+      setTokenFeedback('Token saved to this browser.');
+    } else {
+      persistBackendToken(null);
+      setBackendApiToken(null);
+      setTokenFeedback('Token cleared.');
+    }
+  };
+
+  const handleTokenClear = () => {
+    setTokenInput('');
+    persistBackendToken(null);
+    setBackendApiToken(null);
+    setTokenFeedback('Token cleared.');
   };
 
   const handleMFAReset = () => {
@@ -129,6 +178,69 @@ const Dashboard: React.FC = () => {
           <p>Authenticated with Azure AD - Ready for secure API access</p>
         </div>
 
+        <section className="token-section">
+          <div className="token-section-header">
+            <h3>Backend API Token</h3>
+            <span className={`token-status-pill ${backendApiToken ? 'token-status-pill--ready' : 'token-status-pill--missing'}`}>
+              {backendApiToken ? 'Saved locally' : 'Not saved'}
+            </span>
+          </div>
+          <p className="token-section-hint">
+            Paste the API token from the admin frontpage. It stays in this browser&apos;s local storage only.
+          </p>
+          <form className="token-form" onSubmit={handleTokenSubmit}>
+            <div className="token-input-row">
+              <input
+                type={isTokenVisible ? 'text' : 'password'}
+                className="token-input"
+                value={tokenInput}
+                onChange={event => {
+                  setTokenInput(event.target.value);
+                  if (tokenFeedback) {
+                    setTokenFeedback(null);
+                  }
+                }}
+                placeholder="Enter backend API token"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                className="token-toggle"
+                onClick={() => setIsTokenVisible(visible => !visible)}
+                aria-label={isTokenVisible ? 'Hide token' : 'Show token'}
+              >
+                {isTokenVisible ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <div className="token-actions">
+              <button type="submit" className="token-button primary">
+                Save token
+              </button>
+              <button
+                type="button"
+                className="token-button secondary"
+                onClick={handleTokenClear}
+                disabled={!backendApiToken && !tokenInput}
+              >
+                Clear
+              </button>
+            </div>
+          </form>
+          {backendApiToken && (
+            <div className="token-preview">
+              <span className="token-preview-label">Preview:</span>
+              <span className="token-preview-value">
+                {backendApiToken.length > 12
+                  ? `${backendApiToken.slice(0, 6)}…${backendApiToken.slice(-6)}`
+                  : backendApiToken}
+              </span>
+              <span className="token-preview-length">({backendApiToken.length} chars)</span>
+            </div>
+          )}
+          {tokenFeedback && <div className="token-feedback">{tokenFeedback}</div>}
+        </section>
+
         {/* Action Cards Section */}
         <div className="actions-section">
           <h3 className="section-title">Security Tools</h3>
@@ -184,6 +296,7 @@ const Dashboard: React.FC = () => {
       {showUnfamiliarLogin && (
         <UnfamiliarLoginPage
           accessToken={accessToken}
+          backendApiToken={backendApiToken}
           onClose={() => setShowUnfamiliarLogin(false)}
         />
       )}
