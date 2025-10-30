@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import './SwaggerDocsModal.css';
 
 interface SwaggerDocsModalProps {
@@ -9,11 +9,46 @@ interface SwaggerDocsModalProps {
 const SWAGGER_SPEC_URL = 'https://api.security.ait.dtu.dk/myview/swagger/?format=openapi';
 
 const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClose }) => {
-  const swaggerHtmlDocument = useMemo(() => {
-    const encodedSpecUrl = JSON.stringify(SWAGGER_SPEC_URL);
-    const encodedToken = accessToken ? JSON.stringify(accessToken) : 'null';
+  const [swaggerHtmlDocument, setSwaggerHtmlDocument] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    return `<!DOCTYPE html>
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchSwaggerSpec = async () => {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const headers: HeadersInit = {
+          Accept: 'application/json',
+        };
+
+        if (accessToken) {
+          headers.Authorization = `Bearer ${accessToken}`;
+        }
+
+        const response = await fetch(SWAGGER_SPEC_URL, {
+          method: 'GET',
+          headers,
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load Swagger specification (${response.status})`);
+        }
+
+        const swaggerSpec = await response.json();
+
+        if (!isActive) {
+          return;
+        }
+
+        const serializedSpec = JSON.stringify(swaggerSpec).replace(/</g, '\\u003c');
+        const encodedToken = accessToken ? JSON.stringify(accessToken) : 'null';
+
+        const htmlDocument = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -31,11 +66,11 @@ const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClos
     <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
     <script>
       (function () {
-        const swaggerSpecUrl = ${encodedSpecUrl};
+        const swaggerSpec = ${serializedSpec};
         const accessToken = ${encodedToken};
 
         window.ui = SwaggerUIBundle({
-          url: swaggerSpecUrl,
+          spec: swaggerSpec,
           dom_id: '#swagger-ui',
           presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
           layout: 'BaseLayout',
@@ -52,6 +87,32 @@ const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClos
     </script>
   </body>
 </html>`;
+
+        setSwaggerHtmlDocument(htmlDocument);
+      } catch (error: unknown) {
+        if (!isActive) {
+          return;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Unable to load the Swagger documentation at this time.';
+
+        setErrorMessage(message);
+        setSwaggerHtmlDocument(null);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchSwaggerSpec();
+
+    return () => {
+      isActive = false;
+    };
   }, [accessToken]);
 
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -93,12 +154,24 @@ const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClos
           </div>
         </header>
         <div className="swagger-iframe-container">
-          <iframe
-            srcDoc={swaggerHtmlDocument}
-            title="Backend Swagger Documentation"
-            className="swagger-iframe"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-          />
+          {isLoading && (
+            <div className="swagger-status">
+              <p>Loading Swagger documentation…</p>
+            </div>
+          )}
+          {!isLoading && errorMessage && (
+            <div className="swagger-status">
+              <p>{errorMessage}</p>
+            </div>
+          )}
+          {!isLoading && !errorMessage && swaggerHtmlDocument && (
+            <iframe
+              srcDoc={swaggerHtmlDocument}
+              title="Backend Swagger Documentation"
+              className="swagger-iframe"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+            />
+          )}
         </div>
       </div>
     </div>

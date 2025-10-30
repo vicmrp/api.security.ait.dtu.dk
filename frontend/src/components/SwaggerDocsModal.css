@@ -102,6 +102,23 @@
   border: none;
 }
 
+.swagger-status {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  text-align: center;
+  color: #1e293b;
+  font-size: 0.95rem;
+  background: linear-gradient(145deg, rgba(248, 250, 252, 0.95), rgba(226, 232, 240, 0.7));
+}
+
+.swagger-status p {
+  margin: 0;
+  max-width: 28rem;
+}
+
 @media (max-width: 768px) {
   .swagger-modal-content {
     padding: 0;
