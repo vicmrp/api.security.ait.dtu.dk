@@ -308,6 +308,8 @@ else:
     CORS_ALLOWED_ORIGINS = [
         'http://localhost:3030',
         'http://127.0.0.1:3030',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
         'https://view.security.ait.dtu.dk',
     ]
 

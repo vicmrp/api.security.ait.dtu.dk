@@ -16,9 +16,11 @@ from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.utils.deprecation import MiddlewareMixin
 from rest_framework.authtoken.models import Token
+from rest_framework import exceptions
 
 from .limiter_handlers import limiter_registry
 from .models import ADGroupAssociation, APIRequestLog, Endpoint
+from utils.authentication import AzureAdTokenAuthentication
 
 
 logger = logging.getLogger(__name__)
@@ -121,6 +123,31 @@ class AccessControlMiddleware(MiddlewareMixin):
             return False
 
         request.user = user
+        setattr(request, "_cached_user", user)
+        return True
+
+    def _authenticate_by_bearer(self, request) -> bool:
+        authenticator = getattr(self, "_azure_ad_authenticator", None)
+        if authenticator is None:
+            authenticator = AzureAdTokenAuthentication()
+            self._azure_ad_authenticator = authenticator
+
+        try:
+            result = authenticator.authenticate(request)
+        except exceptions.AuthenticationFailed as exc:
+            logger.info("Azure AD bearer token rejected path=%s reason=%s", request.path, exc)
+            return False
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Unexpected Azure AD token validation failure path=%s", request.path)
+            return False
+
+        if not result:
+            logger.info("Azure AD bearer authentication returned no user path=%s", request.path)
+            return False
+
+        user, _claims = result
+        request.user = user
+        setattr(request, "_cached_user", user)
         return True
 
     def _ensure_debug_user(self, request, normalised_path: str) -> None:
@@ -389,10 +416,9 @@ class AccessControlMiddleware(MiddlewareMixin):
                 scheme_lower = scheme.lower()
                 token_value = credentials if credentials else token
                 should_attempt_token_auth = True
+                use_bearer_auth = scheme_lower == "bearer"
 
-                if scheme_lower == "bearer":
-                    should_attempt_token_auth = False
-                elif scheme_lower in {"basic", "digest"}:
+                if scheme_lower in {"basic", "digest"}:
                     should_attempt_token_auth = False
                 elif not credentials and scheme_lower != token.lower():
                     should_attempt_token_auth = False
@@ -410,14 +436,24 @@ class AccessControlMiddleware(MiddlewareMixin):
                     masked_token,
                 )
 
-                if should_attempt_token_auth and not self._authenticate_by_token(request, token_value.strip()):
-                    action = "invalid_token"
-                    logger.info(
-                        "AccessControl API token authentication failed path=%s scheme=%s",
-                        request.path,
-                        scheme_lower or "<empty>",
-                    )
-                    response = JsonResponse({"error": "Invalid API token."}, status=403)
+                if should_attempt_token_auth:
+                    if use_bearer_auth:
+                        token_valid = self._authenticate_by_bearer(request)
+                    else:
+                        token_valid = self._authenticate_by_token(request, token_value.strip())
+
+                    if not token_valid:
+                        action = "invalid_token"
+                        status_code = 401 if use_bearer_auth else 403
+                        error_message = (
+                            "Invalid bearer token provided." if use_bearer_auth else "Invalid API token."
+                        )
+                        logger.info(
+                            "AccessControl token authentication failed path=%s scheme=%s",
+                            request.path,
+                            scheme_lower or "<empty>",
+                        )
+                        response = JsonResponse({"error": error_message}, status=status_code)
 
             if response is None:
                 if request.user.is_authenticated:

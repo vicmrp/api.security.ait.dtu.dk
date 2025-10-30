@@ -42,7 +42,7 @@ developing.
 ## Azure AD frontend integration
 
 - API endpoints now accept Microsoft Entra ID access tokens issued for the frontend SPA. Configure one of `AZURE_API_AUDIENCE` or `AZURE_API_CLIENT_ID` so Django can validate the `aud` claim. If neither is provided, the value falls back to the confidential client ID used for the legacy login flow.
-- Specify the allowed browser origins with `DJANGO_CORS_ALLOWED_ORIGINS` (comma separated). By default the API allows `http://localhost:3030`, `http://127.0.0.1:3030`, and `https://view.security.ait.dtu.dk`.
+- Specify the allowed browser origins with `DJANGO_CORS_ALLOWED_ORIGINS` (comma separated). By default the API allows `http://localhost:3030`, `http://127.0.0.1:3030`, `http://localhost:5173`, `http://127.0.0.1:5173`, and `https://view.security.ait.dtu.dk`.
 - Optional: `AZURE_AD_LEEWAY_SECONDS` can be used to relax clock drift for token validation (default 120 seconds).
 
 ## Deploying with Coolify + Traefik

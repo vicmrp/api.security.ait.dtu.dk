@@ -3,22 +3,21 @@
 .unfamiliar-login-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, #eef2ff 0%, #f5f3ff 30%, #ffffff 100%);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
+  flex-direction: column;
+  padding: 0;
   z-index: 1000;
 }
 
 .signin-activity-modal {
   width: 100%;
-  max-width: 1200px;
-  max-height: 90vh;
+  height: 100%;
+  max-width: none;
+  max-height: none;
   background: #ffffff;
-  border-radius: 24px;
-  box-shadow: 0 40px 80px rgba(15, 23, 42, 0.22);
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -161,14 +160,14 @@
 }
 
 .signin-content {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   align-items: stretch;
   justify-content: center;
   gap: 28px;
   padding: 32px 36px 36px 36px;
   background: linear-gradient(180deg, #eef2ff 0%, #ffffff 65%);
-  min-height: 520px;
+  min-height: 0;
 }
 
 .globe-panel {
@@ -176,7 +175,7 @@
   background: radial-gradient(circle at 30% 30%, #e0f2fe 0%, #bfdbfe 45%, #c7d2fe 100%);
   display: flex;
   flex-direction: column;
-  flex: 0 1 720px;
+  flex: 1 1 auto;
   border-radius: 24px;
   overflow: hidden;
   box-shadow: 0 25px 45px rgba(15, 23, 42, 0.18);
@@ -186,6 +185,7 @@
 
 .globe-panel > div:first-child {
   flex: 1 1 auto;
+  min-height: 0;
 }
 
 .globe-panel .mapboxgl-canvas,
@@ -223,6 +223,7 @@
   border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.28);
+  max-height: 100%;
 }
 
 .timeline-header {
@@ -270,7 +271,7 @@
 }
 
 .timeline-list {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
   padding: 8px 12px 20px 12px;
   display: flex;
@@ -318,6 +319,64 @@
   color: #a5b4fc;
 }
 
+.timeline-details {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.85);
+  padding: 20px 24px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 38%;
+  overflow-y: auto;
+}
+
+.timeline-details h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e0e7ff;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.details-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.75);
+  margin-bottom: 4px;
+}
+
+.details-value {
+  display: block;
+  font-size: 14px;
+  color: #e0e7ff;
+  word-break: break-word;
+}
+
+.raw-event-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #c7d2fe;
+}
+
+.raw-event-details pre {
+  margin-top: 10px;
+  padding: 14px;
+  background: rgba(2, 6, 23, 0.85);
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  max-height: 220px;
+  overflow: auto;
+}
+
 .popup-content {
   font-size: 13px;
   line-height: 1.4;
@@ -334,23 +393,26 @@
     padding: 24px;
   }
 
-  .timeline-panel {
-    border-left: none;
-    border-top: 1px solid rgba(51, 65, 85, 0.2);
-    max-height: none;
-  }
-
   .globe-panel {
     flex: 1 1 auto;
     max-width: 100%;
   }
+
+  .timeline-panel {
+    flex: 0 0 auto;
+    max-height: none;
+  }
+
+  .timeline-details {
+    max-height: none;
+  }
+
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
-  .unfamiliar-login-overlay {
-    padding: 12px;
-  }
-
   .signin-activity-header,
   .signin-controls {
     padding: 20px;
