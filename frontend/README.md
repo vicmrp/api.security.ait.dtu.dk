@@ -136,7 +136,7 @@ Create `.env` file from `.env.example`:
 | `VITE_MSAL_TENANT_ID` | Azure Tenant ID | `f251f123-c9ce-448e-...` |
 | `VITE_MSAL_AUTHORITY` | Azure Authority URL | `https://login.microsoftonline.com/...` |
 | `VITE_MSAL_REDIRECT_URI` | Redirect after login | `https://yourdomain.com` |
-| `VITE_API_BASE_URL` | Backend API URL | `https://api.security.ait.dtu.dk` |
+| `VITE_API_BASE_URL` | Backend API URL (set to `https://preview-api.security.ait.dtu.dk` for preview, etc.) | `https://api.security.ait.dtu.dk` |
 
 ## 📝 License
 
