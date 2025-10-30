@@ -430,6 +430,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [activeUser, setActiveUser] = useState<string>('');
   const [activeLookback, setActiveLookback] = useState<string>('7d');
+  const [isMapReady, setIsMapReady] = useState(false);
   const geolocationCacheRef = useRef<Map<string, GeoLookupResult>>(new Map());
 
   const effectiveAuthToken = useMemo(() => {
@@ -485,6 +486,20 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       fitMapToEvents(mapInstance, eventsWithCoordinates);
     }
   }, [eventsWithCoordinates, fitMapToEvents]);
+
+  useEffect(() => {
+    if (!isMapReady) {
+      return;
+    }
+
+    const mapInstance = mapRef.current?.getMap();
+    if (!mapInstance) {
+      return;
+    }
+
+    mapInstance.scrollZoom.enable({ around: 'center' });
+    mapInstance.touchZoomRotate.enable({ around: 'center' });
+  }, [isMapReady]);
 
   const handleSelectEvent = (event: SignInEvent) => {
     setSelectedEventId(event.id);
@@ -786,9 +801,11 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
               mapStyle={DEFAULT_STYLE}
               projection="globe"
               style={{ width: '100%', height: '100%' }}
-              scrollZoom
+              scrollZoom={{ around: 'center' }}
+              touchZoomRotate={{ around: 'center' }}
               dragPan
               attributionControl={false}
+              onLoad={() => setIsMapReady(true)}
             >
               <Source id="identity-events-source" type="geojson" data={geoJson}>
                 <Layer {...locationLayer} />
