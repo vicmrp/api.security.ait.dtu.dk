@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapComponent, { Layer, MapRef, Popup, Source } from 'react-map-gl/maplibre';
+import type { MapLayerMouseEvent } from 'react-map-gl/maplibre';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import { LngLatBounds } from 'maplibre-gl';
@@ -27,6 +28,15 @@ interface SignInEvent {
   status?: string;
   geo?: GeoLookupResult;
   raw: RawIdentityEvent;
+}
+
+interface ContextMenuState {
+  eventId: string;
+  position: {
+    x: number;
+    y: number;
+  };
+  source: 'map' | 'timeline';
 }
 
 interface IdentityLogonResponse {
@@ -399,8 +409,10 @@ const buildGeoJson = (events: SignInEvent[]): FeatureCollection<Point> => {
   };
 };
 
+const LOCATION_LAYER_ID = 'identity-events';
+
 const locationLayer: LayerProps = {
-  id: 'identity-events',
+  id: LOCATION_LAYER_ID,
   type: 'circle',
   paint: {
     'circle-radius': [
@@ -430,7 +442,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [activeUser, setActiveUser] = useState<string>('');
   const [activeLookback, setActiveLookback] = useState<string>('7d');
-  const [isMapReady, setIsMapReady] = useState(false);
+  const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const geolocationCacheRef = useRef<Map<string, GeoLookupResult>>(new Map());
 
   const effectiveAuthToken = useMemo(() => {
@@ -456,6 +468,66 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
     () => (selectedEvent ? JSON.stringify(selectedEvent.raw, null, 2) : ''),
     [selectedEvent]
   );
+
+  const contextMenuEvent = useMemo(
+    () =>
+      contextMenuState ? events.find(event => event.id === contextMenuState.eventId) ?? null : null,
+    [contextMenuState, events]
+  );
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenuState(null);
+  }, []);
+
+  const openContextMenu = useCallback(
+    (eventId: string, clientX: number, clientY: number, source: ContextMenuState['source']) => {
+      const estimatedWidth = 220;
+      const estimatedHeight = 96;
+
+      let x = clientX;
+      let y = clientY;
+
+      if (typeof window !== 'undefined') {
+        x = Math.min(clientX, window.innerWidth - estimatedWidth);
+        y = Math.min(clientY, window.innerHeight - estimatedHeight);
+      }
+
+      setContextMenuState({
+        eventId,
+        position: { x, y },
+        source
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!contextMenuState) {
+      return;
+    }
+
+    const handleDismiss = () => {
+      setContextMenuState(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setContextMenuState(null);
+      }
+    };
+
+    window.addEventListener('click', handleDismiss);
+    window.addEventListener('scroll', handleDismiss, true);
+    window.addEventListener('resize', handleDismiss);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('click', handleDismiss);
+      window.removeEventListener('scroll', handleDismiss, true);
+      window.removeEventListener('resize', handleDismiss);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenuState]);
 
   const fitMapToEvents = useCallback(
     (map: MaplibreMap, targetEvents: SignInEvent[]) => {
@@ -513,6 +585,48 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       });
     }
   };
+
+  const handleTimelineContextMenu = (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+    targetEvent: SignInEvent
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openContextMenu(targetEvent.id, event.clientX, event.clientY, 'timeline');
+  };
+
+  const handleMapContextMenu = useCallback(
+    (event: MapLayerMouseEvent) => {
+      const originalEvent = event.originalEvent as MouseEvent | undefined;
+      if (originalEvent) {
+        originalEvent.preventDefault();
+        originalEvent.stopPropagation();
+      }
+
+      const feature = event.features?.[0];
+      const featureId = feature?.properties?.id;
+
+      if (featureId === null || featureId === undefined) {
+        closeContextMenu();
+        return;
+      }
+
+      const clientX = originalEvent?.clientX ?? event.point.x;
+      const clientY = originalEvent?.clientY ?? event.point.y;
+
+      openContextMenu(String(featureId), clientX, clientY, 'map');
+    },
+    [closeContextMenu, openContextMenu]
+  );
+
+  const handleContextMenuDetails = useCallback(() => {
+    if (!contextMenuEvent) {
+      return;
+    }
+
+    handleSelectEvent(contextMenuEvent);
+    closeContextMenu();
+  }, [closeContextMenu, contextMenuEvent]);
 
   const resolveIpGeolocation = useCallback(
     async (ip: string): Promise<GeoLookupResult> => {
@@ -805,7 +919,8 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
               touchZoomRotate={{ around: 'center' }}
               dragPan
               attributionControl={false}
-              onLoad={() => setIsMapReady(true)}
+              interactiveLayerIds={[LOCATION_LAYER_ID]}
+              onContextMenu={handleMapContextMenu}
             >
               <Source id="identity-events-source" type="geojson" data={geoJson}>
                 <Layer {...locationLayer} />
@@ -875,6 +990,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
                 <button
                   key={event.id}
                   onClick={() => handleSelectEvent(event)}
+                  onContextMenu={mouseEvent => handleTimelineContextMenu(mouseEvent, event)}
                   className={`timeline-item${event.id === selectedEventId ? ' active' : ''}`}
                   type="button"
                 >
@@ -972,6 +1088,26 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
             )}
           </aside>
         </section>
+        {contextMenuState && contextMenuEvent && (
+          <div
+            className="signin-context-menu"
+            role="menu"
+            style={{ left: `${contextMenuState.position.x}px`, top: `${contextMenuState.position.y}px` }}
+          >
+            <div className="signin-context-menu__meta" aria-hidden="true">
+              <span className="signin-context-menu__location">{contextMenuEvent.displayLocation}</span>
+              <span className="signin-context-menu__timestamp">
+                {formatTimestamp(contextMenuEvent.timestamp)}
+              </span>
+            </div>
+            <button type="button" onClick={handleContextMenuDetails} className="signin-context-menu__action">
+              View details
+            </button>
+            <button type="button" onClick={closeContextMenu} className="signin-context-menu__dismiss">
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
