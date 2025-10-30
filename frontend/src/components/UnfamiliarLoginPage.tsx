@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Map, { Layer, MapRef, Popup, Source } from 'react-map-gl/maplibre';
+import MapComponent, { Layer, MapRef, Popup, Source } from 'react-map-gl/maplibre';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import { LngLatBounds } from 'maplibre-gl';
@@ -780,7 +780,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
 
         <section className="signin-content">
           <div className="globe-panel">
-            <Map
+            <MapComponent
               ref={mapRef}
               initialViewState={DEFAULT_VIEW}
               mapStyle={DEFAULT_STYLE}
@@ -823,7 +823,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
                     </div>
                   </Popup>
                 )}
-            </Map>
+            </MapComponent>
             {activeUser && events.length > 0 && (
               <div className="globe-caption">
                 Highlighting sign-ins for <strong>{activeUser}</strong>
