@@ -1,14 +1,13 @@
 // Dashboard Component - Clean and Simple
 // Simple interface for API Security tools using Azure AD authentication
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import ApiTestPage from './ApiTestPage';
 import ResetMFAModal from './ResetMFAModal';
 import UnfamiliarLoginPage from './UnfamiliarLoginPage';
 import './Dashboard.css';
-
-const BACKEND_API_TOKEN_KEY = 'myview.backendApiToken';
+import { buildBearerToken, resolveApiBaseUrl } from '../utils/apiBaseUrl';
 
 const Dashboard: React.FC = () => {
   // Use our custom authentication hook
@@ -20,10 +19,13 @@ const Dashboard: React.FC = () => {
   const [showMFAModal, setShowMFAModal] = useState<boolean>(false);
   const [authStatus, setAuthStatus] = useState<'ready' | 'checking' | 'expired'>('checking');
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [backendApiToken, setBackendApiToken] = useState<string | null>(null);
-  const [tokenInput, setTokenInput] = useState('');
-  const [isTokenVisible, setIsTokenVisible] = useState(false);
-  const [tokenFeedback, setTokenFeedback] = useState<string | null>(null);
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const [isApiTokenVisible, setIsApiTokenVisible] = useState(false);
+  const [isFetchingApiToken, setIsFetchingApiToken] = useState(false);
+  const [isRotatingApiToken, setIsRotatingApiToken] = useState(false);
+  const [apiTokenFeedback, setApiTokenFeedback] = useState<
+    { message: string; tone: 'success' | 'error' | 'info' } | null
+  >(null);
 
   // Check authentication status when component mounts
   useEffect(() => {
@@ -47,28 +49,6 @@ const Dashboard: React.FC = () => {
 
     checkAuthStatus();
   }, [user, getAccessToken]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const storedToken = window.localStorage.getItem(BACKEND_API_TOKEN_KEY);
-    if (storedToken) {
-      setBackendApiToken(storedToken);
-      setTokenInput(storedToken);
-    }
-  }, []);
-
-  const persistBackendToken = (token: string | null) => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    if (token) {
-      window.localStorage.setItem(BACKEND_API_TOKEN_KEY, token);
-    } else {
-      window.localStorage.removeItem(BACKEND_API_TOKEN_KEY);
-    }
-  };
 
   // Handlers
   const handleSignOut = async () => {
@@ -95,25 +75,135 @@ const Dashboard: React.FC = () => {
     setShowUnfamiliarLogin(true);
   };
 
-  const handleTokenSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = tokenInput.trim();
-    if (trimmed) {
-      persistBackendToken(trimmed);
-      setBackendApiToken(trimmed);
-      setTokenFeedback('Token saved to this browser.');
-    } else {
-      persistBackendToken(null);
-      setBackendApiToken(null);
-      setTokenFeedback('Token cleared.');
+  const ensureAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const freshToken = await getAccessToken();
+      if (freshToken) {
+        setAccessToken(freshToken);
+        return freshToken;
+      }
+    } catch (error) {
+      console.error('❌ Failed to refresh access token:', error);
     }
-  };
 
-  const handleTokenClear = () => {
-    setTokenInput('');
-    persistBackendToken(null);
-    setBackendApiToken(null);
-    setTokenFeedback('Token cleared.');
+    if (accessToken) {
+      return accessToken;
+    }
+
+    return null;
+  }, [accessToken, getAccessToken]);
+
+  const handleFetchApiToken = useCallback(async () => {
+    setApiTokenFeedback(null);
+
+    const activeAccessToken = await ensureAccessToken();
+    if (!activeAccessToken) {
+      setApiToken(null);
+      setApiTokenFeedback({
+        message: 'No access token available. Please sign in again.',
+        tone: 'error'
+      });
+      return;
+    }
+
+    setIsFetchingApiToken(true);
+    try {
+      const baseUrl = resolveApiBaseUrl();
+      const response = await fetch(`${baseUrl}/myview/api/token/`, {
+        method: 'GET',
+        headers: {
+          Authorization: buildBearerToken(activeAccessToken),
+          Accept: 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Request failed with status ${response.status}`);
+      }
+
+      const payload = (await response.json()) as { api_token?: string | null };
+      const token = payload?.api_token ?? null;
+
+      if (token) {
+        setApiToken(token);
+        setApiTokenFeedback({ message: 'API token loaded.', tone: 'success' });
+      } else {
+        setApiToken(null);
+        setApiTokenFeedback({
+          message: 'No API token found for your account.',
+          tone: 'info'
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to load API token:', error);
+      setApiTokenFeedback({
+        message: 'Failed to load API token. Please try again.',
+        tone: 'error'
+      });
+    } finally {
+      setIsFetchingApiToken(false);
+    }
+  }, [ensureAccessToken]);
+
+  const handleRotateApiToken = useCallback(async () => {
+    setApiTokenFeedback(null);
+
+    const confirmed = window.confirm(
+      'Rotating your API token will immediately invalidate the previous token. Do you want to continue?'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const activeAccessToken = await ensureAccessToken();
+    if (!activeAccessToken) {
+      setApiTokenFeedback({
+        message: 'No access token available. Please sign in again.',
+        tone: 'error'
+      });
+      return;
+    }
+
+    setIsRotatingApiToken(true);
+    try {
+      const baseUrl = resolveApiBaseUrl();
+      const response = await fetch(`${baseUrl}/myview/api/token/rotate/`, {
+        method: 'POST',
+        headers: {
+          Authorization: buildBearerToken(activeAccessToken),
+          Accept: 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Request failed with status ${response.status}`);
+      }
+
+      const payload = (await response.json()) as { api_token?: string | null };
+      const token = payload?.api_token ?? null;
+      setApiToken(token);
+      setApiTokenFeedback({
+        message: 'API token rotated successfully.',
+        tone: 'success'
+      });
+    } catch (error) {
+      console.error('❌ Failed to rotate API token:', error);
+      setApiTokenFeedback({
+        message: 'Failed to rotate API token. Please try again.',
+        tone: 'error'
+      });
+    } finally {
+      setIsRotatingApiToken(false);
+    }
+  }, [ensureAccessToken]);
+
+  const handleToggleApiTokenVisibility = () => {
+    setIsApiTokenVisible(visible => !visible);
   };
 
   const handleMFAReset = () => {
@@ -139,6 +229,26 @@ const Dashboard: React.FC = () => {
       alert('No access token available');
     }
   };
+
+  useEffect(() => {
+    if (authStatus === 'ready') {
+      handleFetchApiToken();
+    }
+  }, [authStatus, handleFetchApiToken]);
+
+  const isApiTokenBusy = isFetchingApiToken || isRotatingApiToken;
+  const apiTokenStatusClass = isApiTokenBusy
+    ? 'token-status-pill--loading'
+    : apiToken
+      ? 'token-status-pill--ready'
+      : 'token-status-pill--missing';
+  const apiTokenStatusText = isRotatingApiToken
+    ? 'Rotating…'
+    : isFetchingApiToken
+      ? 'Loading…'
+      : apiToken
+        ? 'Ready'
+        : 'Not loaded';
 
   return (
     <div className="dashboard-container">
@@ -180,65 +290,64 @@ const Dashboard: React.FC = () => {
 
         <section className="token-section">
           <div className="token-section-header">
-            <h3>Backend API Token</h3>
-            <span className={`token-status-pill ${backendApiToken ? 'token-status-pill--ready' : 'token-status-pill--missing'}`}>
-              {backendApiToken ? 'Saved locally' : 'Not saved'}
+            <h3>API Token</h3>
+            <span className={`token-status-pill ${apiTokenStatusClass}`}>
+              {apiTokenStatusText}
             </span>
           </div>
           <p className="token-section-hint">
-            Paste the API token from the admin frontpage. It stays in this browser&apos;s local storage only.
+            Use this token in the Authorization header as <code>Token &lt;key&gt;</code> when calling the API. The token is fetched
+            using your Azure AD sign-in and is never stored in your browser.
           </p>
-          <form className="token-form" onSubmit={handleTokenSubmit}>
-            <div className="token-input-row">
-              <input
-                type={isTokenVisible ? 'text' : 'password'}
-                className="token-input"
-                value={tokenInput}
-                onChange={event => {
-                  setTokenInput(event.target.value);
-                  if (tokenFeedback) {
-                    setTokenFeedback(null);
-                  }
-                }}
-                placeholder="Enter backend API token"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <button
-                type="button"
-                className="token-toggle"
-                onClick={() => setIsTokenVisible(visible => !visible)}
-                aria-label={isTokenVisible ? 'Hide token' : 'Show token'}
-              >
-                {isTokenVisible ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            <div className="token-actions">
-              <button type="submit" className="token-button primary">
-                Save token
-              </button>
-              <button
-                type="button"
-                className="token-button secondary"
-                onClick={handleTokenClear}
-                disabled={!backendApiToken && !tokenInput}
-              >
-                Clear
-              </button>
-            </div>
-          </form>
-          {backendApiToken && (
+          <div className="token-input-row">
+            <input
+              type={isApiTokenVisible ? 'text' : 'password'}
+              className="token-input"
+              value={apiToken ?? ''}
+              readOnly
+              placeholder={isApiTokenBusy ? 'Loading API token…' : 'Load API token to display'}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="token-toggle"
+              onClick={handleToggleApiTokenVisibility}
+              aria-label={isApiTokenVisible ? 'Hide API token' : 'Show API token'}
+              disabled={!apiToken}
+            >
+              {isApiTokenVisible ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <div className="token-actions">
+            <button
+              type="button"
+              className="token-button primary"
+              onClick={handleFetchApiToken}
+              disabled={isFetchingApiToken}
+            >
+              {isFetchingApiToken ? 'Loading…' : 'Refresh token'}
+            </button>
+            <button
+              type="button"
+              className="token-button danger"
+              onClick={handleRotateApiToken}
+              disabled={isApiTokenBusy}
+            >
+              {isRotatingApiToken ? 'Rotating…' : 'Rotate token'}
+            </button>
+          </div>
+          {apiToken && (
             <div className="token-preview">
-              <span className="token-preview-label">Preview:</span>
-              <span className="token-preview-value">
-                {backendApiToken.length > 12
-                  ? `${backendApiToken.slice(0, 6)}…${backendApiToken.slice(-6)}`
-                  : backendApiToken}
-              </span>
-              <span className="token-preview-length">({backendApiToken.length} chars)</span>
+              <span className="token-preview-label">Length:</span>
+              <span className="token-preview-length">{apiToken.length} chars</span>
             </div>
           )}
-          {tokenFeedback && <div className="token-feedback">{tokenFeedback}</div>}
+          {apiTokenFeedback && (
+            <div className={`token-feedback token-feedback--${apiTokenFeedback.tone}`}>
+              {apiTokenFeedback.message}
+            </div>
+          )}
         </section>
 
         {/* Action Cards Section */}
@@ -296,7 +405,6 @@ const Dashboard: React.FC = () => {
       {showUnfamiliarLogin && (
         <UnfamiliarLoginPage
           accessToken={accessToken}
-          backendApiToken={backendApiToken}
           onClose={() => setShowUnfamiliarLogin(false)}
         />
       )}

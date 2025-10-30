@@ -165,11 +165,26 @@
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.token-status-pill--loading {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
 .token-section-hint {
   margin: 12px 0 0 0;
   color: #4a5568;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.token-section-hint code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: #1e3a8a;
 }
 
 .token-form {
@@ -219,6 +234,13 @@
   transform: translateY(-1px);
 }
 
+.token-toggle:disabled {
+  cursor: not-allowed;
+  background: rgba(99, 102, 241, 0.12);
+  color: rgba(76, 81, 191, 0.6);
+  transform: none;
+}
+
 .token-actions {
   display: flex;
   flex-wrap: wrap;
@@ -254,6 +276,17 @@
 
 .token-button.secondary:hover:not(:disabled) {
   background: rgba(102, 126, 234, 0.18);
+  transform: translateY(-2px);
+}
+
+.token-button.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.token-button.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
   transform: translateY(-2px);
 }
 
@@ -294,10 +327,23 @@
   margin-top: 12px;
   padding: 12px 16px;
   border-radius: 10px;
-  background: rgba(16, 185, 129, 0.15);
-  color: #047857;
   font-weight: 500;
   font-size: 13px;
+}
+
+.token-feedback--success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+.token-feedback--error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+
+.token-feedback--info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
 }
 
 @media (max-width: 768px) {

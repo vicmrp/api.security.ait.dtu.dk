@@ -5,10 +5,12 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import { LngLatBounds } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './UnfamiliarLoginPage.css';
+import { buildBearerToken, resolveApiBaseUrl } from '../utils/apiBaseUrl';
+
+type LayerProps = React.ComponentProps<typeof Layer>;
 
 interface UnfamiliarLoginPageProps {
   accessToken?: string | null;
-  backendApiToken?: string | null;
   onClose: () => void;
 }
 
@@ -290,40 +292,43 @@ const formatTimestamp = (timestamp: string): string => {
 };
 
 const transformEvents = (rawEvents: RawIdentityEvent[]): SignInEvent[] => {
-  return rawEvents
-    .map((raw, index) => {
-      const timestamp = getFirstTimestamp(raw);
-      const ipAddress = getFirstString(raw, IP_ADDRESS_KEYS);
-      const protocol = getFirstString(raw, PROTOCOL_KEYS);
-      const status = getFirstString(raw, STATUS_KEYS);
-      const displayLocation = buildDisplayLocation(raw);
-      const explicitLatitude = getFirstNumber(raw, LATITUDE_KEYS);
-      const explicitLongitude = getFirstNumber(raw, LONGITUDE_KEYS);
-      const coordinateResolution = resolveCoordinates(raw, displayLocation, explicitLatitude, explicitLongitude);
-      const latitude = explicitLatitude ?? coordinateResolution.latitude;
-      const longitude = explicitLongitude ?? coordinateResolution.longitude;
-      const idCandidate =
-        getFirstString(raw, ['EventId', 'Id', 'ActivityId', 'LogonId']) ??
-        `${timestamp ?? 'event'}-${index}`;
+  const events: SignInEvent[] = [];
 
-      if (!timestamp) {
-        return null;
-      }
+  rawEvents.forEach((raw, index) => {
+    const timestamp = getFirstTimestamp(raw);
+    if (!timestamp) {
+      return;
+    }
 
-      return {
-        id: idCandidate,
-        timestamp,
-        displayLocation: coordinateResolution.labelOverride ?? displayLocation,
-        ipAddress: ipAddress ?? undefined,
-        latitude,
-        longitude,
-        protocol: protocol ?? undefined,
-        status: status ?? undefined,
-        raw
-      } satisfies SignInEvent;
-    })
-    .filter((event): event is SignInEvent => event !== null)
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const ipAddress = getFirstString(raw, IP_ADDRESS_KEYS);
+    const protocol = getFirstString(raw, PROTOCOL_KEYS);
+    const status = getFirstString(raw, STATUS_KEYS);
+    const displayLocation = buildDisplayLocation(raw);
+    const explicitLatitude = getFirstNumber(raw, LATITUDE_KEYS);
+    const explicitLongitude = getFirstNumber(raw, LONGITUDE_KEYS);
+    const coordinateResolution = resolveCoordinates(raw, displayLocation, explicitLatitude, explicitLongitude);
+    const latitude = explicitLatitude ?? coordinateResolution.latitude;
+    const longitude = explicitLongitude ?? coordinateResolution.longitude;
+    const idCandidate =
+      getFirstString(raw, ['EventId', 'Id', 'ActivityId', 'LogonId']) ??
+      `${timestamp}-${index}`;
+
+    const event: SignInEvent = {
+      id: idCandidate,
+      timestamp,
+      displayLocation: coordinateResolution.labelOverride ?? displayLocation,
+      ipAddress: ipAddress ?? undefined,
+      latitude,
+      longitude,
+      protocol: protocol ?? undefined,
+      status: status ?? undefined,
+      raw
+    };
+
+    events.push(event);
+  });
+
+  return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 };
 
 const buildGeoJson = (events: SignInEvent[]): FeatureCollection<Point> => {
@@ -349,25 +354,7 @@ const buildGeoJson = (events: SignInEvent[]): FeatureCollection<Point> => {
   };
 };
 
-const resolveApiBaseUrl = (): string => {
-  const explicit = import.meta.env.VITE_API_BASE_URL;
-  if (typeof explicit === 'string' && explicit.trim()) {
-    return explicit.trim().replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined') {
-    const origin = window.location.origin;
-    if (origin.includes('localhost')) {
-      return 'http://localhost:6081';
-    }
-    return origin.replace(/\/$/, '');
-  }
-
-  return 'http://localhost:6081';
-};
-
-
-const locationLayer: Layer = {
+const locationLayer: LayerProps = {
   id: 'identity-events',
   type: 'circle',
   paint: {
@@ -389,7 +376,7 @@ const locationLayer: Layer = {
 
 const DEFAULT_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
-const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, backendApiToken, onClose }) => {
+const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, onClose }) => {
   const [username, setUsername] = useState('');
   const [lookback, setLookback] = useState('7d');
   const [events, setEvents] = useState<SignInEvent[]>([]);
@@ -400,15 +387,10 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
   const [activeLookback, setActiveLookback] = useState<string>('7d');
 
   const effectiveAuthToken = useMemo(() => {
-    const manualToken = backendApiToken?.trim();
-    if (manualToken) {
-      return manualToken;
-    }
     const azureToken = accessToken?.trim();
     return azureToken && azureToken.length > 0 ? azureToken : null;
-  }, [backendApiToken, accessToken]);
+  }, [accessToken]);
 
-  const isUsingBackendToken = Boolean(backendApiToken?.trim());
 
   const mapRef = useRef<MapRef | null>(null);
 
@@ -473,7 +455,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       return;
     }
     if (!effectiveAuthToken) {
-      setError('API authorization token missing. Save a backend token on the dashboard before fetching.');
+      setError('API authorization token missing. Please sign in again.');
       return;
     }
 
@@ -486,12 +468,10 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       const endpoint = `${baseUrl}/graph/v1.0/identitylogonevents/${encodeURIComponent(targetUser)}`;
       const url = windowParam ? `${endpoint}?lookback=${encodeURIComponent(windowParam)}` : endpoint;
 
-      const tokenForHeader = /^Bearer\s+/i.test(effectiveAuthToken) ? effectiveAuthToken : `Bearer ${effectiveAuthToken}`;
-
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          Authorization: tokenForHeader,
+          Authorization: buildBearerToken(effectiveAuthToken),
           'Content-Type': 'application/json'
         }
       });
@@ -555,10 +535,8 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
         <form className="signin-controls" onSubmit={handleSubmit}>
           <div className={`token-status-banner ${effectiveAuthToken ? 'ready' : 'missing'}`}>
             {effectiveAuthToken
-              ? isUsingBackendToken
-                ? 'Using backend API token saved on the dashboard.'
-                : 'Using Azure AD access token.'
-              : 'No API token available. Save one on the dashboard to continue.'}
+              ? 'Using Azure AD access token.'
+              : 'No API token available. Please sign in again to continue.'}
           </div>
           <div className="input-group">
             <label htmlFor="signin-username">User Principal Name</label>
