@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import './SwaggerDocsModal.css';
 
 interface SwaggerDocsModalProps {
@@ -6,17 +6,52 @@ interface SwaggerDocsModalProps {
   onClose: () => void;
 }
 
-const SWAGGER_BASE_URL = 'https://api.security.ait.dtu.dk/myview/swagger/';
+const SWAGGER_SPEC_URL = 'https://api.security.ait.dtu.dk/myview/swagger/?format=openapi';
 
 const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClose }) => {
-  const swaggerUrl = useMemo(() => {
-    if (!accessToken) {
-      return SWAGGER_BASE_URL;
-    }
+  const swaggerHtmlDocument = useMemo(() => {
+    const encodedSpecUrl = JSON.stringify(SWAGGER_SPEC_URL);
+    const encodedToken = accessToken ? JSON.stringify(accessToken) : 'null';
 
-    const url = new URL(SWAGGER_BASE_URL);
-    url.searchParams.set('access_token', accessToken);
-    return url.toString();
+    return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Swagger UI</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+      body { margin: 0; background: #f5f5f5; }
+      #swagger-ui { height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+      (function () {
+        const swaggerSpecUrl = ${encodedSpecUrl};
+        const accessToken = ${encodedToken};
+
+        window.ui = SwaggerUIBundle({
+          url: swaggerSpecUrl,
+          dom_id: '#swagger-ui',
+          presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+          layout: 'BaseLayout',
+          deepLinking: true,
+          requestInterceptor: (req) => {
+            if (accessToken) {
+              req.headers = req.headers || {};
+              req.headers.Authorization = 'Bearer ' + accessToken;
+            }
+            return req;
+          },
+        });
+      })();
+    </script>
+  </body>
+</html>`;
   }, [accessToken]);
 
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -24,6 +59,19 @@ const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClos
       onClose();
     }
   };
+
+  const handleOpenInNewTab = useCallback(() => {
+    if (!swaggerHtmlDocument) {
+      window.open('https://api.security.ait.dtu.dk/myview/swagger/', '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const blob = new Blob([swaggerHtmlDocument], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  }, [swaggerHtmlDocument]);
 
   return (
     <div className="swagger-modal-overlay" onClick={handleOverlayClick}>
@@ -36,14 +84,9 @@ const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClos
             </p>
           </div>
           <div className="swagger-modal-actions">
-            <a
-              className="swagger-open-link"
-              href={swaggerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <button className="swagger-open-link" onClick={handleOpenInNewTab} type="button">
               Open in new tab
-            </a>
+            </button>
             <button className="swagger-close-button" onClick={onClose} aria-label="Close swagger modal">
               ×
             </button>
@@ -51,7 +94,7 @@ const SwaggerDocsModal: React.FC<SwaggerDocsModalProps> = ({ accessToken, onClos
         </header>
         <div className="swagger-iframe-container">
           <iframe
-            src={swaggerUrl}
+            srcDoc={swaggerHtmlDocument}
             title="Backend Swagger Documentation"
             className="swagger-iframe"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups"

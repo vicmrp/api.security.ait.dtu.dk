@@ -60,6 +60,8 @@
   font-weight: 600;
   font-size: 0.9rem;
   text-decoration: none;
+  border: none;
+  cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
