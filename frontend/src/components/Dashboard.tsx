@@ -111,7 +111,7 @@ const Dashboard: React.FC = () => {
         fetch(endpoint, {
           method: 'GET',
           headers,
-          credentials: 'include'
+          credentials: 'omit'
         });
 
       const buildErrorMessage = async (response: Response) => {

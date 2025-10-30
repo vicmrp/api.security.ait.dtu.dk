@@ -12,6 +12,7 @@ type LayerProps = React.ComponentProps<typeof Layer>;
 
 interface UnfamiliarLoginPageProps {
   accessToken?: string | null;
+  backendApiToken?: string | null;
   onClose: () => void;
 }
 
@@ -156,6 +157,14 @@ const COUNTRY_COORDINATES: Record<string, CountryCoordinate> = {
   RUSSIA: { latitude: 61.524, longitude: 105.3188, label: 'Russia' },
   MX: { latitude: 23.6345, longitude: -102.5528, label: 'Mexico' },
   MEXICO: { latitude: 23.6345, longitude: -102.5528, label: 'Mexico' }
+};
+
+const buildBackendTokenHeader = (token: string): string => {
+  const trimmed = token.trim();
+  if (/^(Token|Bearer)\s+/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `Token ${trimmed}`;
 };
 
 const DTU_CAMPUS_COORDINATES: CountryCoordinate = {
@@ -433,7 +442,11 @@ const locationLayer: LayerProps = {
 
 const DEFAULT_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
-const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, onClose }) => {
+const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
+  accessToken,
+  backendApiToken,
+  onClose
+}) => {
   const [username, setUsername] = useState('');
   const [lookback, setLookback] = useState('7d');
   const [events, setEvents] = useState<SignInEvent[]>([]);
@@ -443,13 +456,31 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
   const [activeUser, setActiveUser] = useState<string>('');
   const [activeLookback, setActiveLookback] = useState<string>('7d');
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
   const geolocationCacheRef = useRef<Map<string, GeoLookupResult>>(new Map());
 
-  const effectiveAuthToken = useMemo(() => {
-    const azureToken = accessToken?.trim();
-    return azureToken && azureToken.length > 0 ? azureToken : null;
-  }, [accessToken]);
+  const authContext = useMemo(() => {
+    const manualToken = backendApiToken?.trim();
+    if (manualToken) {
+      return {
+        header: buildBackendTokenHeader(manualToken),
+        source: 'backend' as const
+      };
+    }
 
+    const azureToken = accessToken?.trim();
+    if (azureToken && azureToken.length > 0) {
+      return {
+        header: buildBearerToken(azureToken),
+        source: 'azure' as const
+      };
+    }
+
+    return null;
+  }, [backendApiToken, accessToken]);
+
+  const effectiveAuthToken = authContext?.header ?? null;
+  const isUsingBackendToken = authContext?.source === 'backend';
 
   const mapRef = useRef<MapRef | null>(null);
 
@@ -790,7 +821,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       return;
     }
     if (!effectiveAuthToken) {
-      setError('API authorization token missing. Please sign in again.');
+      setError('API authorization token missing. Save a backend token on the dashboard or sign in again.');
       return;
     }
 
@@ -806,7 +837,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          Authorization: buildBearerToken(effectiveAuthToken),
+          Authorization: effectiveAuthToken,
           'Content-Type': 'application/json'
         }
       });
@@ -871,8 +902,10 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
         <form className="signin-controls" onSubmit={handleSubmit}>
           <div className={`token-status-banner ${effectiveAuthToken ? 'ready' : 'missing'}`}>
             {effectiveAuthToken
-              ? 'Using Azure AD access token.'
-              : 'No API token available. Please sign in again to continue.'}
+              ? isUsingBackendToken
+                ? 'Using backend API token saved on the dashboard.'
+                : 'Using Azure AD access token.'
+              : 'No API token available. Save a backend token or sign in again to continue.'}
           </div>
           <div className="input-group">
             <label htmlFor="signin-username">User Principal Name</label>
@@ -921,6 +954,7 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({ accessToken, 
               attributionControl={false}
               interactiveLayerIds={[LOCATION_LAYER_ID]}
               onContextMenu={handleMapContextMenu}
+              onLoad={() => setIsMapReady(true)}
             >
               <Source id="identity-events-source" type="geojson" data={geoJson}>
                 <Layer {...locationLayer} />
