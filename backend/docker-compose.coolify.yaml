@@ -1,7 +1,6 @@
 
 services:
   web:
-    container_name: api-security-web
     build:
       context: .
       dockerfile: Dockerfile
@@ -50,16 +49,16 @@ services:
       - static_data:/data/static
       - media_data:/data/media
     networks:
-      - ${DOCKER_NETWORK:-internal}
+      - internal
       - proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.api_security.rule=Host(`api.security.ait.dtu.dk`)"
-      - "traefik.http.routers.api_security.entrypoints=https"
-      - "traefik.http.routers.api_security.tls=true"
-      - "traefik.http.routers.api_security.tls.domains[0].main=api.security.ait.dtu.dk"
-      - "traefik.http.routers.api_security.tls.certresolver="
-      - "traefik.http.services.api_security.loadbalancer.server.port=8121"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.rule=Host(`${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}`)"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.entrypoints=https"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.tls=true"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.tls.domains[0].main=${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.tls.certresolver="
+      - "traefik.http.services.${TRAEFIK_SERVICE_NAME:-api_security}.loadbalancer.server.port=8121"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-coolify}"
 
   db:
@@ -72,7 +71,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - ${DOCKER_NETWORK:-internal}
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
       interval: 10s
@@ -86,7 +85,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - ${DOCKER_NETWORK:-internal}
+      - internal
 
 volumes:
   postgres_data:
@@ -95,9 +94,9 @@ volumes:
   redis_data:
 
 networks:
-  ${DOCKER_NETWORK:-internal}:
+  internal:
     driver: bridge
+    name: ${DOCKER_NETWORK:-api-security-internal}
   proxy:
     external: true
     name: ${TRAEFIK_NETWORK:-coolify}
-
