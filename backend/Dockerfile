@@ -9,7 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive \
-    PATH="/home/django/.local/bin:${PATH}"
+    PATH="/home/django/.local/bin:/usr/local/bin:${PATH}" \
+    NVM_DIR="/root/.nvm"
 
 # System packages required for building Python dependencies (pyodbc, psycopg, etc.)
 RUN apt-get update \
@@ -30,6 +31,7 @@ RUN apt-get update \
         libxslt1-dev \
         netcat-openbsd \
         pkg-config \
+        sudo \
         tzdata \
         unixodbc \
         unixodbc-dev \
@@ -56,7 +58,8 @@ RUN set -eux; \
 RUN groupadd --system django \
     && useradd --system --gid django --home /home/django --shell /bin/bash django \
     && mkdir -p /home/django \
-    && chown -R django:django /home/django
+    && chown -R django:django /home/django \
+    && echo "django ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 WORKDIR /app
 
