@@ -39,6 +39,12 @@ class Migration(migrations.Migration):
         ("myview", "0009_mfaresetrecord"),
     ]
 
+    # Dropping the ``no_limit`` column can conflict with pending deferrable
+    # trigger events on PostgreSQL when the migration is wrapped in a single
+    # transaction.  Running the operations non-atomically lets Postgres commit
+    # the previous trigger work before issuing the ``ALTER TABLE`` statement.
+    atomic = False
+
     operations = [
         migrations.RunPython(forwards, backwards),
         migrations.RemoveField(
