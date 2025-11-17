@@ -19,7 +19,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework import exceptions
 
 from .limiter_handlers import limiter_registry
-from .models import ADGroupAssociation, APIRequestLog, Endpoint
+from .models import APIRequestLog, Endpoint
 from utils.authentication import AzureAdTokenAuthentication
 
 
@@ -281,62 +281,12 @@ class AccessControlMiddleware(MiddlewareMixin):
             return
 
         cache_key = f"user_ad_groups_{user.id}"
-
-        ADGroupAssociation.sync_user_ad_groups_cached(
-            username=user.username,
-            max_age_seconds=getattr(settings, "AD_GROUP_CACHE_TIMEOUT", 15 * 60),
-            block=False,
-        )
-
         user_ad_groups = user.ad_group_members.all()
         cache.set(
             cache_key,
             list(user_ad_groups.values_list("id", flat=True)),
             timeout=settings.AD_GROUP_CACHE_TIMEOUT,
         )
-
-    # ------------------------------------------------------------------
-    # Session helpers
-    # ------------------------------------------------------------------
-    def _ensure_session_group_sync(self, request) -> None:
-        if not getattr(request.user, "is_authenticated", False):
-            return
-
-        session = getattr(request, "session", None)
-        if session is None:
-            return
-
-        max_age = getattr(settings, "AD_GROUP_CACHE_TIMEOUT", 15 * 60)
-        now = time.time()
-
-        session_last = session.get("ad_groups_synced_at")
-        if session_last and (now - float(session_last)) <= max_age:
-            return
-
-        username_key = str(request.user.username).strip().lower()
-        cache_ts_key = f"user_ad_groups_sync_ts:{username_key}"
-        cache_last = cache.get(cache_ts_key)
-        if cache_last and (now - float(cache_last)) <= max_age:
-            session["ad_groups_synced_at"] = cache_last
-            session.modified = True
-            return
-
-        try:
-            sync_start = time.monotonic()
-            scheduled = ADGroupAssociation.sync_user_ad_groups_cached(
-                username=request.user.username,
-                max_age_seconds=max_age,
-                force=False,
-                block=False,
-            )
-            if scheduled:
-                logger.info(
-                    "sync_user_ad_groups_cached scheduled user=%s duration=%.2fs",
-                    request.user.username,
-                    time.monotonic() - sync_start,
-                )
-        except Exception:  # pragma: no cover - defensive logging
-            logger.warning("Failed to schedule AD group sync", exc_info=True)
 
     # ------------------------------------------------------------------
     # Logging helpers
@@ -402,9 +352,6 @@ class AccessControlMiddleware(MiddlewareMixin):
         action = "init"
         response = None
 
-        # Periodically refresh AD group definitions when configured.
-        self._maybe_trigger_group_sync(request, bool(token))
-
         if normalised_path == "/favicon.ico/":
             action = "favicon"
             response = self.get_response(request)
@@ -456,9 +403,6 @@ class AccessControlMiddleware(MiddlewareMixin):
                         response = JsonResponse({"error": error_message}, status=status_code)
 
             if response is None:
-                if request.user.is_authenticated:
-                    self._ensure_session_group_sync(request)
-
                 if self._is_whitelisted_path(normalised_path):
                     action = "whitelist"
                     if request.user.is_authenticated:
@@ -504,28 +448,3 @@ class AccessControlMiddleware(MiddlewareMixin):
 
         self._log_request(request, response, action, duration_ms, token)
         return response
-
-    def _maybe_trigger_group_sync(self, request, token_present: bool) -> None:
-        if not getattr(settings, "AD_GROUP_AUTO_SYNC_ENABLED", False):
-            return
-
-        sync_started = time.monotonic()
-        block_sync = request.user.is_authenticated or token_present
-        sync_triggered = False
-
-        try:
-            sync_triggered = ADGroupAssociation.ensure_groups_synced_cached(block=block_sync)
-        except Exception:  # pragma: no cover - defensive logging
-            logger.warning("AccessControl AD group sync failed", exc_info=True)
-            return
-
-        if sync_triggered:
-            logger.info("ensure_groups_synced_cached triggered path=%s block=%s", request.path, block_sync)
-
-        logger.debug(
-            "AccessControl AD group sync %s in %.1fms",
-            "ran inline" if block_sync and sync_triggered else (
-                "scheduled async" if (not block_sync and sync_triggered) else "skipped (fresh cache)"
-            ),
-            (time.monotonic() - sync_started) * 1000,
-        )
