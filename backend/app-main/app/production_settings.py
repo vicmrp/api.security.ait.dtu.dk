@@ -18,12 +18,18 @@ from typing import Any
 import warnings
 
 import yaml
+from dotenv import dotenv_values
 from termcolor import colored
 
 # Paths used to discover the compose file and optional helper data directories.
 APP_MAIN_DIR = Path(__file__).resolve().parents[1]
 BACKEND_DIR = APP_MAIN_DIR.parent
 COMPOSE_PATH = BACKEND_DIR / "docker-compose.coolify.yaml"
+ENV_FILE_CANDIDATES = [
+    BACKEND_DIR / ".env",
+    BACKEND_DIR / ".devcontainer" / ".env",
+    BACKEND_DIR.parent / ".devcontainer" / ".env",
+]
 DATA_DIR = Path(os.environ.get("DJANGO_DOCKER_DATA_DIR", "/data"))
 PRIMARY_HOSTNAME = "api.security.ait.dtu.dk"
 DEV_HOSTNAME = os.environ.get("DJANGO_DEV_HOSTNAME", "dev-api.security.ait.dtu.dk").strip()
@@ -54,6 +60,37 @@ def _resolve_compose_default(raw_value: str) -> str | None:
         return None
 
     return value
+
+
+def _hydrate_local_env() -> None:
+    """Load the first available .env-style file into os.environ.
+
+    Values already present with non-empty strings are left untouched so
+    user-provided overrides still win. Empty strings (which Python treats as
+    "set" despite carrying no data) are replaced with the .env value so VS Code
+    profiles that predefine blank env vars do not mask secrets.
+    """
+
+    for candidate in ENV_FILE_CANDIDATES:
+        if not candidate.exists():
+            continue
+        try:
+            entries = dotenv_values(candidate)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            warnings.warn(f"Unable to load environment from {candidate}: {exc}", stacklevel=2)
+            continue
+
+        for key, value in entries.items():
+            if value in (None, ""):
+                continue
+            existing = os.environ.get(key)
+            if existing:
+                continue
+            if existing == "":
+                os.environ[key] = value
+                continue
+            os.environ[key] = value
+        break
 
 
 def _ensure_env_list(var_name: str, required_values: list[str]) -> None:
@@ -161,6 +198,8 @@ def _apply_compose_defaults() -> None:
             os.environ.setdefault(key, default)
 
 
+# Hydrate .env before mirroring docker-compose defaults so file values win.
+_hydrate_local_env()
 # Mirror the docker-compose defaults before importing the canonical settings.
 _apply_compose_defaults()
 
@@ -215,12 +254,20 @@ for path in (Path(os.environ["DJANGO_STATIC_ROOT"]), Path(os.environ["DJANGO_MED
 from .settings import *  # noqa: E402,F401,F403
 
 current_user = getpass.getuser()
+env_redirect_uri = os.environ.get("AZURE_REDIRECT_URI") or "<unset>"
+try:
+    effective_redirect_uri = (AZURE_AD or {}).get("REDIRECT_URI")
+except NameError:  # pragma: no cover - defensive
+    effective_redirect_uri = None
+
 summary = textwrap.dedent(
     f"""
     Running production-aligned settings as {current_user} with:
       DJANGO_ALLOWED_HOSTS={ALLOWED_HOSTS}
       CSRF_TRUSTED_ORIGINS={CSRF_TRUSTED_ORIGINS}
       DEBUG={DEBUG}
+      AZURE_REDIRECT_URI env={env_redirect_uri}
+      Effective redirect URI={effective_redirect_uri}
     """
 ).strip()
 print(colored(summary, "green"))

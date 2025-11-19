@@ -41,7 +41,15 @@ from .forms import (
     MfaResetLookupForm,
 )
 from .limiter_handlers import limiter_registry
-from .models import ADGroupAssociation, BugReport, BugReportAttachment, Endpoint, MFAResetAttempt, MFAResetRecord
+from .models import (
+    ADGroupAssociation,
+    ADOrganizationalUnitLimiter,
+    BugReport,
+    BugReportAttachment,
+    Endpoint,
+    MFAResetAttempt,
+    MFAResetRecord,
+)
 from .constants import NO_LIMIT_LIMITER_NAME
 from active_directory.services import execute_active_directory_query
 
