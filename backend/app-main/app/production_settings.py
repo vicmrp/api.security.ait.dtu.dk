@@ -12,6 +12,7 @@ from __future__ import annotations
 import getpass
 import os
 from pathlib import Path
+import socket
 import textwrap
 from typing import Any
 import warnings
@@ -69,6 +70,21 @@ def _ensure_env_list(var_name: str, required_values: list[str]) -> None:
 
     if changed or var_name not in os.environ:
         os.environ[var_name] = ",".join(existing)
+
+
+def _discover_local_ipv4_hosts() -> list[str]:
+    """Return non-loopback IPv4 addresses assigned to this container/host."""
+
+    try:
+        _, _, host_ips = socket.gethostbyname_ex(socket.gethostname())
+    except OSError as exc:
+        warnings.warn(
+            f"Unable to determine local IPv4 addresses for allowed hosts: {exc}",
+            stacklevel=2,
+        )
+        return []
+
+    return [ip for ip in host_ips if ip and not ip.startswith("127.")]
 
 
 # Ensure the dev hostname resolves locally so the certificate CN matches.
@@ -169,6 +185,15 @@ _ensure_env_list(
         f"https://{DEV_HOSTNAME}",
     ],
 )
+
+_local_ipv4_hosts = _discover_local_ipv4_hosts()
+if _local_ipv4_hosts:
+    _ensure_env_list("DJANGO_ALLOWED_HOSTS", _local_ipv4_hosts)
+    csrf_origins: list[str] = []
+    for ip in _local_ipv4_hosts:
+        csrf_origins.extend([f"http://{ip}", f"https://{ip}"])
+    _ensure_env_list("DJANGO_CSRF_TRUSTED_ORIGINS", csrf_origins)
+
 os.environ.setdefault("DJANGO_CSRF_COOKIE_DOMAIN", ".security.ait.dtu.dk")
 # Keep SERVICE_* aligned with the dev hostname so redirect URLs and Azure values
 # match the local certificate CN.
@@ -199,4 +224,3 @@ summary = textwrap.dedent(
     """
 ).strip()
 print(colored(summary, "green"))
-

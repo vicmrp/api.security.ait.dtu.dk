@@ -6,6 +6,7 @@ APP_USER=${APP_USER:-django}
 APP_GROUP=${APP_GROUP:-$APP_USER}
 APP_DIR=${APP_DIR:-/app/app-main}
 MANAGE_PY="${APP_DIR}/manage.py"
+initial_cwd=$(pwd)
 
 # Attempt to discover manage.py automatically when the default location is missing.
 if [ ! -f "$MANAGE_PY" ]; then
@@ -48,6 +49,40 @@ ensure_storage_dir() {
     fi
   fi
 }
+
+align_user_with_workspace_owner() {
+  workspace_dir=${DEVCONTAINER_WORKSPACE_DIR:-}
+
+  if [ -z "$workspace_dir" ] || [ ! -d "$workspace_dir" ]; then
+    return
+  fi
+
+  target_uid=$(stat -c "%u" "$workspace_dir" 2>/dev/null || printf '')
+  target_gid=$(stat -c "%g" "$workspace_dir" 2>/dev/null || printf '')
+  current_uid=$(id -u "$APP_USER" 2>/dev/null || printf '')
+  current_gid=$(id -g "$APP_GROUP" 2>/dev/null || printf '')
+  ownership_changed=0
+
+  if [ -n "$target_gid" ] && [ -n "$current_gid" ] && [ "$target_gid" -ne 0 ] && [ "$target_gid" -ne "$current_gid" ]; then
+    if groupmod -g "$target_gid" "$APP_GROUP" 2>/dev/null; then
+      ownership_changed=1
+    fi
+  fi
+
+  if [ -n "$target_uid" ] && [ -n "$current_uid" ] && [ "$target_uid" -ne 0 ] && [ "$target_uid" -ne "$current_uid" ]; then
+    if usermod -u "$target_uid" "$APP_USER" 2>/dev/null; then
+      ownership_changed=1
+    fi
+  fi
+
+  if [ "$ownership_changed" -eq 1 ]; then
+    chown -R "$APP_USER":"$APP_GROUP" "/home/$APP_USER" 2>/dev/null || true
+  fi
+}
+
+if [ "$(id -u)" = "0" ] && [ "${DEVCONTAINER_SYNC_UID_GID:-0}" = "1" ]; then
+  align_user_with_workspace_owner
+fi
 
 if [ ! -f "$MANAGE_PY" ]; then
   echo "Could not locate manage.py at $MANAGE_PY" >&2
@@ -224,6 +259,17 @@ if [ "$1" = "gunicorn" ] && ! command -v gunicorn >/dev/null 2>&1; then
   echo "gunicorn command not found; falling back to python -m gunicorn" >&2
   set -- python -m gunicorn "${@:2}"
 fi
+
+target_cwd="$APP_DIR"
+if [ -n "$DEVCONTAINER_DEFAULT_CWD" ]; then
+  if [ -d "$DEVCONTAINER_DEFAULT_CWD" ]; then
+    target_cwd="$DEVCONTAINER_DEFAULT_CWD"
+  elif [ -n "$initial_cwd" ] && [ -d "$initial_cwd" ]; then
+    target_cwd="$initial_cwd"
+  fi
+fi
+
+cd "$target_cwd" 2>/dev/null || cd "$APP_DIR"
 
 if [ "$(id -u)" = "0" ]; then
   if command -v runuser >/dev/null 2>&1; then
