@@ -2,7 +2,7 @@
     "name": "Dev container: web",
     "dockerComposeFile": "docker-compose.dev.yaml",
     "service": "web",
-    "workspaceFolder": "/app",
+    "workspaceFolder": "/workspace",
     "remoteUser": "django",
     "containerEnv": {
         "DEVCONTAINER_GITHUB_NAME": "Victor Reipur",

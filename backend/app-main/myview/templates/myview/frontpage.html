@@ -1,0 +1,124 @@
+{% extends base_template %}
+
+<!-- i18n and static are Django template tags. They are used to load the i18n and static template tags. The i18n template tag is used to mark strings for translation. -->
+<!-- The static is a template tag that is used to load the static template tag library. This library provides a way to reference static files, such as CSS, JavaScript, or image files, which are not tied to a particular instance of a model in your Django app. -->
+{% load i18n static %}
+
+
+{# title #}
+{% block title %}Front page{% endblock %}
+
+{% block dynamic_head_content %}
+
+{% endblock %}
+
+
+<!-- headline for the page -->
+{% block headline %}Frontpage{% endblock %}
+
+{% block main-content %}
+
+
+<div class="container my-4">    
+    <div class="container my-4">
+        <label for="apiKeyInput" class="form-label d-flex align-items-center gap-2 mb-2">
+            <span>API key</span>
+            <i
+                class="bi bi-question-circle-fill"
+                data-bs-toggle="tooltip"
+                data-bs-placement="right"
+                title="Use this key in the Authorization header as <code>Token &lt;key&gt;</code> when calling the API."
+                data-bs-html="true"
+            ></i>
+        </label>
+        <div class="input-group api-key-input-group">
+            <input type="password" class="form-control" id="apiKeyInput" placeholder="Rotate to generate a new API key" readonly>
+            <button id="toggleApiKeyVisibility" class="btn btn-outline-secondary" type="button" aria-label="Show API key">
+                <i class="bi bi-eye-slash" aria-hidden="true"></i>
+            </button>
+            <button id="rotateApiKeyBtn" class="btn btn-warning text-dark" type="button">
+                <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>
+                Rotate API key
+            </button>
+        </div>
+        <div class="form-text text-warning mt-2">
+            Rotating your API key will immediately invalidate your previous key.
+        </div>
+    </div>
+
+    <div class="container my-4">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+            <h2 class="mb-0">My Accessible Endpoints</h2>
+            <div class="d-flex align-items-center gap-2">
+                <span id="limiterFilterSummary" class="badge bg-info text-dark d-none"></span>
+                <button id="filterLimiterTypeBtn" class="btn btn-outline-primary btn-sm">
+                    Filter limiter types
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">Endpoint</th>
+                        <!-- <th scope="col"><i class="bi bi-question-circle-fill" data-bs-toggle="tooltip" data-bs-placement="right" title="These groups gives you permission to the endpoint" data-bs-html="true"></i> AD Group</th> -->
+                        <th scope="col">Limiter Type</th>
+                        <th scope="col">Unrestricted Access</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for endpoint in user_endpoints %}
+                    <tr data-endpoint-row data-limiter-type="{{ endpoint.limiter_type }}">
+                        <th scope="row">{{ forloop.counter }}</th>
+                        <td>{{ endpoint.method }} {{ endpoint.path }}</td>
+                        <!-- <td> not working rigth now -->
+                            {% comment %}
+                            {% for ad_group in endpoint.ad_groups %}  <!-- Adjusted to use the filtered groups -->
+                                {{ ad_group.cn }}
+                                {% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                            {% endcomment %}
+                        <!-- </td> -->
+                        <td>{{ endpoint.limiter_type }}</td>
+                        <td>{{ endpoint.unrestricted_access|yesno:"Yes,No" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="container my-4">
+        <h2>Limiter Types</h2>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Canonical Names</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for limiter_type in all_limiter_types %}
+                    <tr>
+                        <td>{{ limiter_type.name }}</td>
+                        <td>{{ limiter_type.description }}</td>
+                        <td>{{ limiter_type.canonical_names|default:"N/A" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3">No limiter types available</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{{ available_limiter_types|json_script:"available-limiter-types-data" }}
+    <script src="{% static 'myview/js/frontpage.js' %}" defer></script>
+    <link rel="stylesheet" type="text/css" media="all" href="{% static 'myview/css/frontpage.css' %}" />
+{% endblock %}

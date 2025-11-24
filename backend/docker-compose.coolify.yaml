@@ -1,0 +1,102 @@
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: dtuait/api-security-ait-dtu-dk-app-main:latest
+    # Use Dockerfile's default CMD: gunicorn app.wsgi:application --bind 0.0.0.0:8121
+    restart: unless-stopped
+    working_dir: /app/app-main
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8121/healthz/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    command: ["bash", "-lc", "gunicorn app.wsgi:application --bind 0.0.0.0:8121 & pid=$!; for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:8121/healthz/ >/dev/null 2>&1; then break; fi; sleep 1; done; wait $pid"]
+    environment:
+      SERVICE_FQDN_WEB: ${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}
+      SERVICE_URL_WEB: ${SERVICE_URL_WEB:-https://api.security.ait.dtu.dk}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api.security.ait.dtu.dk,localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-https://api.security.ait.dtu.dk}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_STATIC_ROOT: /data/static
+      DJANGO_MEDIA_ROOT: /data/media
+      DJANGO_SESSION_COOKIE_SECURE: ${DJANGO_SESSION_COOKIE_SECURE:-true}
+      DJANGO_CSRF_COOKIE_SECURE: ${DJANGO_CSRF_COOKIE_SECURE:-true}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-true}
+      DJANGO_SECURE_HSTS_SECONDS: ${DJANGO_SECURE_HSTS_SECONDS:-3600}
+      DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: ${DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS:-true}
+      DJANGO_SECURE_HSTS_PRELOAD: ${DJANGO_SECURE_HSTS_PRELOAD:-true}
+      AZURE_REDIRECT_URI: ${AZURE_REDIRECT_URI:-https://api.security.ait.dtu.dk/auth/callback}
+      DJANGO_SECRET: ${DJANGO_SECRET:?DJANGO_SECRET must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      CACHE_URL: ${CACHE_URL:-redis://redis:6379/0}
+    volumes:
+      - static_data:/data/static
+      - media_data:/data/media
+    networks:
+      - internal
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.rule=Host(`${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}`)"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.entrypoints=https"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.tls=true"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.tls.domains[0].main=${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.tls.certresolver="
+      - "traefik.http.services.${TRAEFIK_SERVICE_NAME:-api_security}.loadbalancer.server.port=8121"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-api-security-proxy}"
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-please-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+
+volumes:
+  postgres_data:
+  static_data:
+  media_data:
+  redis_data:
+
+networks:
+  internal:
+    driver: bridge
+    name: ${DOCKER_NETWORK:-api-security-internal}
+  proxy:
+    driver: bridge
+    name: ${TRAEFIK_NETWORK:-api-security-proxy}
+    attachable: true
+    external: ${TRAEFIK_NETWORK_EXTERNAL:-false}

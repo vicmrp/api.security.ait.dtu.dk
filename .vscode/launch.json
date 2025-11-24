@@ -4,7 +4,7 @@
             "name": "ServerLive: localhost_debug_true_settings",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/app-main/manage.py",
+            "program": "${workspaceFolder}/backend/app-main/manage.py",
             "args": [
                 "runserver",
                 "0.0.0.0:6081",
@@ -19,7 +19,7 @@
             "name": "ServerLive: localhost_debug_false_settings",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/app-main/manage.py",
+            "program": "${workspaceFolder}/backend/app-main/manage.py",
             "args": [
                 "runserver",
                 "0.0.0.0:6081",
@@ -34,7 +34,7 @@
             "name": "ServerLive: production_settings",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/app-main/manage.py",
+            "program": "${workspaceFolder}/backend/app-main/manage.py",
             "args": [
                 "runserver",
                 "0.0.0.0:8121",
@@ -46,6 +46,32 @@
             "console": "integratedTerminal"
         }
 
+        ,{
+            "name": "ServerLive: dev-api (https)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/backend/app-main/manage.py",
+            "args": [
+                "runserver_plus",
+                "0.0.0.0:8121",
+                "--cert-file",
+                "/workspace/certs/fullchain.pem",
+                "--key-file",
+                "/workspace/certs/privkey.pem",
+                "--settings",
+                "app.production_settings"
+            ],
+            "django": true,
+            "justMyCode": true,
+            "console": "integratedTerminal",
+            "env": {
+                "DJANGO_DEV_HOSTNAME": "dev-api.security.ait.dtu.dk",
+                "DJANGO_CSRF_COOKIE_DOMAIN": ".security.ait.dtu.dk",
+                "DJANGO_SECURE_SSL_REDIRECT": "true",
+                "SERVICE_FQDN_WEB": "dev-api.security.ait.dtu.dk",
+                "SERVICE_URL_WEB": "https://dev-api.security.ait.dtu.dk"
+            }
+        }
 
     ]
 }

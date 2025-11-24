@@ -1,0 +1,248 @@
+/* Login Page Styles */
+/* This CSS makes the login page look professional and take up full screen */
+
+.login-container {
+  /* Take up full viewport height and width */
+  min-height: 100vh;
+  width: 100%;
+  
+  /* Center the login card */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Beautiful gradient background */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #667eea 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
+  
+  /* Remove any default margins/padding */
+  margin: 0;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.login-card {
+  /* Enhanced card styling */
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  
+  /* Size and spacing */
+  max-width: 450px;
+  width: 100%;
+  padding: 50px;
+  
+  /* Center content inside card */
+  text-align: center;
+  
+  /* Subtle animation */
+  transform: translateY(0);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.login-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 35px 70px rgba(0, 0, 0, 0.2);
+}
+
+.login-header h1 {
+  /* Main title styling */
+  color: #2d3748;
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  line-height: 1.2;
+}
+
+.login-header p {
+  /* Subtitle styling */
+  color: #718096;
+  font-size: 16px;
+  margin: 0 0 32px 0;
+  line-height: 1.5;
+}
+
+.sign-in-btn {
+  /* Button styling */
+  background: #0078d4;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  
+  /* Size and spacing */
+  width: 100%;
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  
+  /* Layout for icon and text */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  
+  /* Interaction styles */
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sign-in-btn:hover:not(:disabled) {
+  /* Hover effect */
+  background: #106ebe;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 120, 212, 0.3);
+}
+
+.sign-in-btn:active:not(:disabled) {
+  /* Click effect */
+  transform: translateY(0);
+}
+
+.sign-in-btn:disabled {
+  /* Disabled state */
+  background: #a0aec0;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.microsoft-icon {
+  /* Microsoft logo styling */
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.loading-spinner {
+  /* Loading text */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-spinner::before {
+  /* Spinning animation */
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-message {
+  /* Error message styling */
+  margin-top: 20px;
+  padding: 12px;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 8px;
+}
+
+.error-message p {
+  /* Error text */
+  color: #dc2626;
+  margin: 0;
+  font-size: 14px;
+}
+
+.privacy-notice {
+  /* Privacy notice styling */
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.privacy-notice p {
+  /* Privacy text */
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.privacy-link {
+  /* Privacy link styling */
+  color: #0078d4;
+  text-decoration: none;
+}
+
+.privacy-link:hover {
+  text-decoration: underline;
+}
+
+/* Debug Section */
+.debug-section {
+  margin-top: 24px;
+  padding: 20px;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 8px;
+}
+
+.debug-section h4 {
+  color: #d69e2e;
+  font-size: 16px;
+  margin: 0 0 12px 0;
+}
+
+.debug-section p {
+  color: #744210;
+  font-size: 14px;
+  margin: 8px 0;
+}
+
+.debug-btn {
+  background: #d69e2e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  margin: 12px 0;
+  transition: background 0.2s ease;
+}
+
+.debug-btn:hover {
+  background: #b7791f;
+}
+
+.debug-info {
+  background: rgba(255, 255, 255, 0.8);
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+/* Responsive design for mobile */
+@media (max-width: 480px) {
+  .login-container {
+    padding: 16px;
+  }
+  
+  .login-card {
+    padding: 32px 24px;
+  }
+  
+  .login-header h1 {
+    font-size: 24px;
+  }
+}

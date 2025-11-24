@@ -4,28 +4,25 @@
 services:
   web:
     build:
-      context: ..
+      context: ../backend
       dockerfile: Dockerfile
       target: development
     image: dtuait/api-security-ait-dtu-dk-app-main:dev-latest
     command: sleep infinity
     env_file:
-      - ./.env
+      - ../backend/.env
     restart: always
     tty: true
-    working_dir: /app/app-main
+    working_dir: /workspace/backend/app-main
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8121/healthz/ || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     environment:
+      DEVCONTAINER_DEFAULT_CWD: /workspace
+      DEVCONTAINER_SYNC_UID_GID: "1"
+      DEVCONTAINER_WORKSPACE_DIR: /workspace
       SERVICE_FQDN_WEB: ${SERVICE_FQDN_WEB}
       SERVICE_URL_WEB: ${SERVICE_URL_WEB}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
@@ -49,21 +46,20 @@ services:
       CACHE_URL: ${CACHE_URL}
       DJANGO_MIGRATE: "false"
       DJANGO_COLLECTSTATIC: "false"
+      APP_ENV_FILE: /workspace/backend/.env
     volumes:
-      - ..:/app
-      - ../shared-project-data:/mnt/shared-project-data
+      - ../:/workspace
+      - ../backend/shared-project-data:/mnt/shared-project-data
       - static_data:/data/static
       - media_data:/data/media
     networks:
       - internal
-    ports:
-      - "8121:8121"
 
   db:
     image: postgres:16
     restart: always
     env_file:
-      - ./.env
+      - ../backend/.env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
