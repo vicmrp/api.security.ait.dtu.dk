@@ -2,7 +2,7 @@ import logging
 
 from django.apps import AppConfig
 from django.apps import apps as django_apps
-from django.db import OperationalError, ProgrammingError
+from django.db import DEFAULT_DB_ALIAS, OperationalError, ProgrammingError, connections
 from django.db.utils import ConnectionDoesNotExist
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,29 @@ class HibpConfig(AppConfig):
 
     def _ensure_endpoint_limiters(self) -> None:
         """Assign AD OU limiter type to all configured HIBP endpoints."""
+
+        try:
+            connection = connections[DEFAULT_DB_ALIAS]
+            with connection.cursor() as cursor:
+                table_names = set(connection.introspection.table_names(cursor))
+        except (OperationalError, ProgrammingError, ConnectionDoesNotExist):
+            logger.info("Database not ready for HIBP limiter sync; will rely on signals")
+            return
+        except Exception:  # pragma: no cover - defensive
+            logger.exception(
+                "Unexpected error while checking database readiness for HIBP limiter sync"
+            )
+            return
+
+        required_tables = {
+            "myview_limitertype",
+            "myview_endpoint",
+            "django_content_type",
+        }
+
+        if not required_tables.issubset(table_names):
+            logger.info("Database tables missing for HIBP limiter sync; will rely on signals")
+            return
 
         try:
             Endpoint = django_apps.get_model("myview", "Endpoint")
