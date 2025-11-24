@@ -1,8 +1,8 @@
 .swagger-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(6px);
+  background: linear-gradient(180deg, #111827 0%, #1f2937 30%, #374151 100%);
+  backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11,9 +11,10 @@
 }
 
 .swagger-modal-content {
-  background: rgba(255, 255, 255, 0.97);
-  border-radius: 18px;
-  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.25);
+  background: rgba(31, 41, 55, 0.95);
+  border-radius: 24px;
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(75, 85, 99, 0.3);
   width: min(1200px, 100%);
   height: min(90vh, 800px);
   display: flex;
@@ -27,18 +28,19 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 1.5rem 1.75rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  border-bottom: 1px solid rgba(75, 85, 99, 0.3);
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
 }
 
 .swagger-modal-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: #1e293b;
+  color: #f8fafc;
 }
 
 .swagger-modal-header p {
   margin: 0.35rem 0 0 0;
-  color: #475569;
+  color: #d1d5db;
   font-size: 0.95rem;
   max-width: 32rem;
 }

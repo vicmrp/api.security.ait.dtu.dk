@@ -383,54 +383,87 @@ const Dashboard: React.FC = () => {
           )}
         </section>
 
-        {/* Action Cards Section */}
-        <div className="actions-section">
-          <h3 className="section-title">Security Tools</h3>
+        {/* Security Tools Section */}
+        <section className="security-tools-section">
+          <div className="section-header">
+            <h3 className="section-title">Security Tools</h3>
+            <p className="section-subtitle">Identity investigation and security management</p>
+          </div>
           
-          <div className="cards-grid">
-            {/* API Documentation Card */}
-            <div className="card" onClick={handleViewDocs}>
-              <div className="card-icon">📋</div>
-              <h3>API Documentation</h3>
-              <p>Browse complete API documentation and examples</p>
+          <div className="tools-grid">
+            {/* Primary Tools Row */}
+            <div className="tool-category">
+              <h4 className="category-title">Investigation Tools</h4>
+              <div className="tools-row">
+                <button className={`tool-card primary ${authStatus !== 'ready' ? 'disabled' : ''}`} onClick={handleUnfamiliarLogin}>
+                  <div className="tool-icon"></div>
+                  <div className="tool-info">
+                    <h5>Check Unfamiliar Login</h5>
+                    <p>View login locations and diagnosed unfamiliar sign-ins</p>
+                  </div>
+                  <div className="tool-arrow">→</div>
+                </button>
+                
+                <button className={`tool-card ${authStatus !== 'ready' ? 'disabled' : ''}`} onClick={handleTestApi}>
+                  <div className="tool-icon"></div>
+                  <div className="tool-info">
+                    <h5>Breach Check</h5>
+                    <p>Search for breached accounts and security incidents</p>
+                  </div>
+                  <div className="tool-arrow">→</div>
+                </button>
+              </div>
             </div>
 
-            {/* Swagger UI Card */}
-            <div className="card" onClick={handleSwaggerDocs}>
-              <div className="card-icon">🧭</div>
-              <h3>Swagger UI</h3>
-              <p>Open backend Swagger docs in an embedded viewer</p>
+            {/* Management Tools Row */}
+            <div className="tool-category">
+              <h4 className="category-title">Management Tools</h4>
+              <div className="tools-row">
+                <button className="tool-card" onClick={handleMFAReset}>
+                  <div className="tool-icon"></div>
+                  <div className="tool-info">
+                    <h5>MFA Reset</h5>
+                    <p>Reset multi-factor authentication for users</p>
+                  </div>
+                  <div className="tool-arrow">→</div>
+                </button>
+                
+                <button className="tool-card" onClick={handleShowToken}>
+                  <div className="tool-icon"></div>
+                  <div className="tool-info">
+                    <h5>Access Token</h5>
+                    <p>View current Azure AD access token</p>
+                  </div>
+                  <div className="tool-arrow">→</div>
+                </button>
+              </div>
             </div>
 
-            {/* Check Unfamiliar Login Card */}
-            <div className={`card ${authStatus !== 'ready' ? 'disabled' : ''}`} onClick={handleUnfamiliarLogin}>
-              <div className="card-icon">🔍</div>
-              <h3>Check Unfamiliar<br />Login</h3>
-              <p>View login locations and diagnosed unfamiliar sign-ins</p>
-            </div>
-
-            {/* Breach Check Card */}
-            <div className={`card ${authStatus !== 'ready' ? 'disabled' : ''}`} onClick={handleTestApi}>
-              <div className="card-icon">⚠️</div>
-              <h3>Breach Check</h3>
-              <p>Search for breached accounts and security incidents</p>
-            </div>
-
-            {/* MFA Reset Card */}
-            <div className="card" onClick={handleMFAReset}>
-              <div className="card-icon">🔐</div>
-              <h3>MFA Reset</h3>
-              <p>Reset multi-factor authentication for users</p>
-            </div>
-
-            {/* Access Token Card */}
-            <div className="card" onClick={handleShowToken}>
-              <div className="card-icon">🎫</div>
-              <h3>Access Token</h3>
-              <p>View current Azure AD access token</p>
+            {/* Documentation Tools Row */}
+            <div className="tool-category">
+              <h4 className="category-title">Documentation</h4>
+              <div className="tools-row">
+                <button className="tool-card" onClick={handleSwaggerDocs}>
+                  <div className="tool-icon"></div>
+                  <div className="tool-info">
+                    <h5>Swagger UI</h5>
+                    <p>Open backend Swagger docs in an embedded viewer</p>
+                  </div>
+                  <div className="tool-arrow">→</div>
+                </button>
+                
+                <button className="tool-card" onClick={handleViewDocs}>
+                  <div className="tool-icon"></div>
+                  <div className="tool-info">
+                    <h5>API Documentation</h5>
+                    <p>Browse complete API documentation and examples</p>
+                  </div>
+                  <div className="tool-arrow">→</div>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
       
       {/* API Test Page Modal */}

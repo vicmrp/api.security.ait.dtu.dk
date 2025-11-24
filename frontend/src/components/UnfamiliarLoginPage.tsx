@@ -398,19 +398,25 @@ const transformEvents = (rawEvents: RawIdentityEvent[]): SignInEvent[] => {
 const buildGeoJson = (events: SignInEvent[]): FeatureCollection<Point> => {
   const features: Feature<Point>[] = events
     .filter(event => typeof event.latitude === 'number' && typeof event.longitude === 'number')
-    .map(event => ({
-      type: 'Feature',
-      geometry: {
-        type: 'Point',
-        coordinates: [event.longitude as number, event.latitude as number]
-      },
-      properties: {
-        id: event.id,
-        location: event.displayLocation,
-        timestamp: event.timestamp,
-        ipAddress: event.ipAddress ?? ''
-      }
-    }));
+    .map((event, index) => {
+      // Placeholder: Mark every 3rd event as warning for demo purposes
+      // Replace this logic with actual API warning data
+      const isWarning = index % 3 === 0;
+      return {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [event.longitude as number, event.latitude as number]
+        },
+        properties: {
+          id: event.id,
+          location: event.displayLocation,
+          timestamp: event.timestamp,
+          ipAddress: event.ipAddress ?? '',
+          isWarning: isWarning ? 1 : 0
+        }
+      };
+    });
 
   return {
     type: 'FeatureCollection',
@@ -433,7 +439,12 @@ const locationLayer: LayerProps = {
       5,
       8
     ],
-    'circle-color': '#f97316',
+    'circle-color': [
+      'case',
+      ['==', ['get', 'isWarning'], 1],
+      '#ef4444',
+      '#10b981'
+    ],
     'circle-stroke-color': '#111827',
     'circle-stroke-width': 1.5,
     'circle-opacity': 0.85
@@ -499,6 +510,10 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
   const [isDetailsExpanded, setIsDetailsExpanded] =
     useState<boolean>(readStoredDetailsExpanded);
   const [isTimelineResizing, setIsTimelineResizing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'signin' | 'hibp' | 'actions'>('signin');
+  const [hibpData, setHibpData] = useState<any[]>([]);
+  const [hibpLoading, setHibpLoading] = useState(false);
+  const [hibpError, setHibpError] = useState<string | null>(null);
   const copyStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timelineBodyRef = useRef<HTMLDivElement | null>(null);
   const activeResizerPointerIdRef = useRef<number | null>(null);
@@ -583,6 +598,46 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
     },
     []
   );
+
+  const fetchHibpData = useCallback(async (email: string) => {
+    if (!authContext?.header) {
+      setHibpError('Authentication required. Please sign in with Azure AD or save a backend API token in the dashboard settings.');
+      return;
+    }
+
+    setHibpLoading(true);
+    setHibpError(null);
+
+    try {
+      // Use Vite proxy to call HIBP API directly
+      const encodedEmail = encodeURIComponent(email.trim());
+      const response = await fetch(
+        `/hibp-api/api/v3/breachedaccount/${encodedEmail}?truncateResponse=false&includeUnverified=false`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        }
+      );
+
+      if (response.status === 404) {
+        // No breaches found
+        setHibpData([]);
+      } else if (response.ok) {
+        const data = await response.json();
+        console.log('HIBP data:', data);
+        setHibpData(Array.isArray(data) ? data : []);
+      } else {
+        throw new Error(`HIBP API error: ${response.status}`);
+      }
+    } catch (err) {
+      setHibpError(err instanceof Error ? err.message : 'Failed to fetch HIBP data');
+      setHibpData([]);
+    } finally {
+      setHibpLoading(false);
+    }
+  }, [authContext]);
 
   useEffect(() => {
     if (!contextMenuState) {
@@ -1099,8 +1154,13 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
 
           try {
             timeoutId = setTimeout(() => controller.abort(), 6000);
-            const response = await fetch(`https://ipwho.is/${encodeURIComponent(normalized)}`, {
-              signal: controller.signal
+            // Try ip-api.com which supports CORS
+            const response = await fetch(`http://ip-api.com/json/${encodeURIComponent(normalized)}`, {
+              signal: controller.signal,
+              mode: 'cors',
+              headers: {
+                'Accept': 'application/json'
+              }
             });
 
             if (!response.ok) {
@@ -1114,18 +1174,18 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
             }
           }
 
-          if (payload?.success) {
-            const labelParts = [payload.city, payload.region, payload.country]
+          if (payload?.status === 'success') {
+            const labelParts = [payload.city, payload.regionName, payload.country]
               .map((part: string | undefined) => (typeof part === 'string' && part.trim() ? part.trim() : null))
               .filter(Boolean) as string[];
             const label = labelParts.length > 0 ? labelParts.join(', ') : payload.country || 'Unknown location';
 
             result = {
               ip: normalized,
-              latitude: typeof payload.latitude === 'number' ? payload.latitude : undefined,
-              longitude: typeof payload.longitude === 'number' ? payload.longitude : undefined,
+              latitude: typeof payload.lat === 'number' ? payload.lat : undefined,
+              longitude: typeof payload.lon === 'number' ? payload.lon : undefined,
               city: payload.city || undefined,
-              region: payload.region || payload.region_name || undefined,
+              region: payload.regionName || payload.region || undefined,
               country: payload.country || undefined,
               isp: payload.connection?.isp || payload.isp || payload.org || undefined,
               label: label || 'Unknown location',
@@ -1276,6 +1336,9 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
       setSelectedEventId(primarySelection.id);
       setActiveUser(targetUser);
       setActiveLookback(windowParam || '7d');
+      
+      // Also load HIBP data alongside sign-ins
+      fetchHibpData(targetUser);
     } catch (err) {
       console.error('Failed to load IdentityLogonEvents', err);
       const fallbackMessage =
@@ -1307,6 +1370,9 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
           </button>
         </header>
 
+        {/* Area 1: Alert banner for suspicious logins */}
+        {/* Placeholder for future suspicious login alerts from API */}
+
         <form className="signin-controls" onSubmit={handleSubmit}>
           <div className={`token-status-banner ${effectiveAuthToken ? 'ready' : 'missing'}`}>
             {effectiveAuthToken
@@ -1328,25 +1394,64 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
               disabled={loading}
             />
           </div>
+
+          {/* Area 4: Lookback dropdown with preset values */}
           <div className="input-group">
             <label htmlFor="signin-lookback">Lookback Window</label>
-            <input
+            <select
               id="signin-lookback"
-              type="text"
               value={lookback}
               onChange={event => setLookback(event.target.value)}
-              placeholder="7d"
               disabled={loading}
-            />
+              className="lookback-select"
+            >
+              <option value="7d">7d (Last week)</option>
+              <option value="30d">30d (Last month)</option>
+              <option value="182d">182d (Last six months)</option>
+              <option value="365d">365d (Last year)</option>
+              <option value="custom">Custom</option>
+            </select>
+            {lookback === 'custom' && (
+              <input
+                id="signin-lookback-custom"
+                type="text"
+                value={lookback}
+                onChange={event => setLookback(event.target.value)}
+                placeholder="e.g., 14d"
+                disabled={loading}
+                className="lookback-custom-input"
+              />
+            )}
           </div>
-          <button
-            type="submit"
-            className="submit-button"
-            disabled={loading || !username.trim() || !effectiveAuthToken}
-          >
-            {loading ? 'Fetching…' : 'Load sign-ins'}
-          </button>
+
+          <div className="submit-button-wrapper">
+            <button
+              type="submit"
+              className="submit-button"
+              disabled={loading || !username.trim() || !effectiveAuthToken}
+            >
+              {loading ? 'Fetching…' : 'Load sign-ins'}
+            </button>
+          </div>
         </form>
+
+        {/* Area 2: Action buttons */}
+        <div className="action-buttons-wrapper">
+          <div className="action-buttons-container expanded">
+            <button className="action-button action-mfa" disabled={!selectedEvent}>
+              Disable MFA
+            </button>
+            <button className="action-button action-email" disabled={!selectedEvent}>
+              Alert Mail
+            </button>
+            <button className="action-button action-ad" disabled={!selectedEvent}>
+              Disable in AD
+            </button>
+            <button className="action-button action-blacklist" disabled={!selectedEvent}>
+              Blacklist on Network
+            </button>
+          </div>
+        </div>
 
         <section className="signin-content">
           <div className={`globe-panel${selectedEvent && isDetailsExpanded ? ' details-overlay-active' : ''}`}>
@@ -1376,8 +1481,9 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
                     latitude={selectedEvent.latitude}
                     longitude={selectedEvent.longitude}
                     anchor="bottom"
-                    closeButton={false}
+                    closeButton={true}
                     closeOnClick={false}
+                    onClose={() => setSelectedEventId(null)}
                   >
                     <div className="popup-content">
                       <strong>{selectedEvent.displayLocation}</strong>
@@ -1435,78 +1541,174 @@ const UnfamiliarLoginPage: React.FC<UnfamiliarLoginPageProps> = ({
           </div>
 
           <aside className={timelinePanelClassName}>
-            <div className="timeline-header">
-              <h3>Sign-ins</h3>
-              <span>{events.length}</span>
+            {/* Area 3: Tabs for different data views */}
+            <div className="data-tabs">
+              <button 
+                className={`tab-button ${activeTab === 'signin' ? 'active' : ''}`}
+                onClick={() => setActiveTab('signin')}
+              >
+                Sign-in Locations
+                <span className="tab-warning-badge">{events.filter((_, index) => index % 3 === 0).length}</span>
+              </button>
+              <button 
+                className={`tab-button ${activeTab === 'hibp' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('hibp');
+                  if (activeUser) {
+                    fetchHibpData(activeUser);
+                  }
+                }}
+              >
+                HaveIBeenPwned
+                <span className="tab-warning-badge">{hibpData.length}</span>
+              </button>
+              <button 
+                className={`tab-button ${activeTab === 'actions' ? 'active' : ''}`}
+                onClick={() => setActiveTab('actions')}
+              >
+                Recommended Actions
+              </button>
             </div>
 
-            {error && <div className="error-state">{error}</div>}
+            <div className="timeline-header">
+              <div className="timeline-header-left">
+                <h3>
+                  {activeTab === 'signin' && 'Sign-ins'}
+                  {activeTab === 'hibp' && 'Have I Been Pwned'}
+                  {activeTab === 'actions' && 'Recommended Actions'}
+                </h3>
+                <span className="timeline-count">
+                  {activeTab === 'signin' && events.length}
+                  {activeTab === 'hibp' && hibpData.length}
+                  {activeTab === 'actions' && '0'}
+                </span>
+              </div>
+              {activeTab === 'signin' && (
+                <label className="filter-warnings-checkbox">
+                  <input type="checkbox" />
+                  <span>Show warnings only</span>
+                </label>
+              )}
+            </div>
 
-            {!error && !loading && events.length === 0 && (
+            {/* Tab Content */}
+            {activeTab === 'signin' && (
+              <>
+                {error && <div className="error-state">{error}</div>}
+                {!error && !loading && events.length === 0 && (
+                  <div className="empty-state">
+                    Enter a user principal name and select "Load sign-ins" to review their activity.
+                  </div>
+                )}
+                {loading && <div className="loading-indicator">Loading sign-ins…</div>}
+              </>
+            )}
+            
+            {activeTab === 'hibp' && (
+              <>
+                {hibpError && <div className="error-state">{hibpError}</div>}
+                {!hibpError && !hibpLoading && hibpData.length === 0 && (
+                  <div className="empty-state">
+                    {activeUser ? 'No breaches found for this email address.' : 'Load sign-ins data first to check for breaches.'}
+                  </div>
+                )}
+                {hibpLoading && <div className="loading-indicator">Checking Have I Been Pwned…</div>}
+                <div className="timeline-body timeline-body--single">
+                  <div className="timeline-list">
+                    {hibpData.map((breach, index) => (
+                      <div key={index} className="timeline-item">
+                        <div className="event-location">{breach.Name}</div>
+                        <div className="event-timestamp">Breach Date: {breach.BreachDate}</div>
+                        <div className="event-meta">
+                          Compromised: {breach.DataClasses?.join(', ') || 'Unknown'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+            
+            {activeTab === 'actions' && (
+              <>
+                <div className="empty-state">
+                  Recommended actions will be displayed here based on sign-in analysis.
+                </div>
+              </>
+            )}
+
+            {activeTab === 'signin' && !error && !loading && events.length === 0 && (
               <div className="empty-state">
                 Enter a user principal name and select “Load sign-ins” to review their activity.
               </div>
             )}
 
-            {loading && <div className="loading-indicator">Loading sign-ins…</div>}
+            {activeTab === 'signin' && loading && <div className="loading-indicator">Loading sign-ins…</div>}
 
-            <div
-              className={`timeline-body${selectedEvent ? '' : ' timeline-body--single'}`}
-              ref={timelineBodyRef}
-            >
-              <div className="timeline-list" style={timelineListStyle}>
-                {events.map(event => (
-                  <button
-                    key={event.id}
-                    onClick={() => handleSelectEvent(event)}
-                    onContextMenu={mouseEvent => handleTimelineContextMenu(mouseEvent, event)}
-                    className={`timeline-item${event.id === selectedEventId ? ' active' : ''}`}
-                    type="button"
-                  >
-                    <span className="event-location">{event.displayLocation}</span>
-                    <span className="event-timestamp">{formatTimestamp(event.timestamp)}</span>
-                    <span className="event-meta">
-                      {event.ipAddress ? `IP ${event.ipAddress}` : 'IP unknown'}
-                      {event.protocol ? ` · ${event.protocol}` : ''}
-                      {event.status ? ` · ${event.status}` : ''}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {selectedEvent && (
-                <>
-                  <div
-                    className={resizerClassName}
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label="Resize sign-in list and details"
-                    aria-valuemin={TIMELINE_SPLIT_MIN}
-                    aria-valuemax={TIMELINE_SPLIT_MAX}
-                    aria-valuenow={Math.round(timelineListWidthPercent)}
-                    tabIndex={0}
-                    onPointerDown={handleTimelineResizerPointerDown}
-                    onKeyDown={handleTimelineResizerKeyDown}
-                    onDoubleClick={handleTimelineResizerDoubleClick}
-                    title="Drag to resize the list and details. Double-click to reset."
-                  />
-                  <div className="timeline-details" style={timelineDetailsStyle}>
-                    <div className="timeline-details__header">
-                      <h4>Sign-in details</h4>
+            {activeTab === 'signin' && (
+              <div
+                className={`timeline-body${selectedEvent ? '' : ' timeline-body--single'}`}
+                ref={timelineBodyRef}
+              >
+                <div className="timeline-list" style={timelineListStyle}>
+                  {events.map((event, index) => {
+                    // Placeholder: Mark every 3rd event as warning for demo purposes
+                    // Replace this logic with actual API warning data
+                    const isWarning = index % 3 === 0;
+                    return (
                       <button
+                        key={event.id}
+                        onClick={() => handleSelectEvent(event)}
+                        onContextMenu={mouseEvent => handleTimelineContextMenu(mouseEvent, event)}
+                        className={`timeline-item${event.id === selectedEventId ? ' active' : ''}${isWarning ? ' warning' : ''}`}
                         type="button"
-                        className={`timeline-details__expand-button${isDetailsExpanded ? ' active' : ''}`}
-                        onClick={toggleDetailsExpanded}
-                        aria-pressed={isDetailsExpanded}
                       >
-                        {isDetailsExpanded ? 'Exit expanded view' : 'Expand view'}
+                        <span className="event-location">{event.displayLocation}</span>
+                        <span className="event-timestamp">{formatTimestamp(event.timestamp)}</span>
+                        <span className="event-meta">
+                          {event.ipAddress ? `IP ${event.ipAddress}` : 'IP unknown'}
+                          {event.protocol ? ` · ${event.protocol}` : ''}
+                          {event.status ? ` · ${event.status}` : ''}
+                        </span>
                       </button>
+                    );
+                  })}
+                </div>
+
+                {selectedEvent && (
+                  <>
+                    <div
+                      className={resizerClassName}
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Resize sign-in list and details"
+                      aria-valuemin={TIMELINE_SPLIT_MIN}
+                      aria-valuemax={TIMELINE_SPLIT_MAX}
+                      aria-valuenow={Math.round(timelineListWidthPercent)}
+                      tabIndex={0}
+                      onPointerDown={handleTimelineResizerPointerDown}
+                      onKeyDown={handleTimelineResizerKeyDown}
+                      onDoubleClick={handleTimelineResizerDoubleClick}
+                      title="Drag to resize the list and details. Double-click to reset."
+                    />
+                    <div className="timeline-details" style={timelineDetailsStyle}>
+                      <div className="timeline-details__header">
+                        <h4>Sign-in details</h4>
+                        <button
+                          type="button"
+                          className={`timeline-details__expand-button${isDetailsExpanded ? ' active' : ''}`}
+                          onClick={toggleDetailsExpanded}
+                          aria-pressed={isDetailsExpanded}
+                        >
+                          {isDetailsExpanded ? 'Exit expanded view' : 'Expand view'}
+                        </button>
+                      </div>
+                      <div className="timeline-details__body">{detailsContent}</div>
                     </div>
-                    <div className="timeline-details__body">{detailsContent}</div>
-                  </div>
-                </>
-              )}
-            </div>
+                  </>
+                )}
+              </div>
+            )}
           </aside>
         </section>
         {contextMenuState && contextMenuEvent && (

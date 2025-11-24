@@ -46,16 +46,14 @@ const ApiTestPage: React.FC<ApiTestPageProps> = ({ accessToken, onClose }) => {
     setResponse(null);
 
     try {
-      const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
-      const fullUrl = `${apiBaseUrl}/hibp/v3/breachedaccount/${encodeURIComponent(email)}`;
+      const fullUrl = `/hibp-api/api/v3/breachedaccount/${encodeURIComponent(email)}?truncateResponse=false&includeUnverified=false`;
       
-      console.log('Calling API endpoint:', fullUrl);
+      console.log('Calling HIBP API via Vite proxy:', fullUrl);
       
       const response = await fetch(fullUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
       });
 
