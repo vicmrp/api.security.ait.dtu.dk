@@ -14,12 +14,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8121/healthz/ || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     command: ["bash", "-lc", "gunicorn app.wsgi:application --bind 0.0.0.0:8121 & pid=$!; for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:8121/healthz/ >/dev/null 2>&1; then break; fi; sleep 1; done; wait $pid"]
     environment:
       SERVICE_FQDN_WEB: ${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}
