@@ -94,3 +94,4 @@ networks:
     name: ${TRAEFIK_NETWORK:?TRAEFIK_NETWORK must be set}
     attachable: true
     external: ${TRAEFIK_NETWORK_EXTERNAL:?TRAEFIK_NETWORK_EXTERNAL must be set}
+

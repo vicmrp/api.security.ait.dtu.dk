@@ -23,27 +23,10 @@ services:
       DEVCONTAINER_DEFAULT_CWD: /workspace
       DEVCONTAINER_SYNC_UID_GID: "1"
       DEVCONTAINER_WORKSPACE_DIR: /workspace
-      SERVICE_FQDN_WEB: ${SERVICE_FQDN_WEB}
-      SERVICE_URL_WEB: ${SERVICE_URL_WEB}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
-      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
-      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
       DJANGO_STATIC_ROOT: /data/static
       DJANGO_MEDIA_ROOT: /data/media
-      DJANGO_SESSION_COOKIE_SECURE: ${DJANGO_SESSION_COOKIE_SECURE:-true}
-      DJANGO_CSRF_COOKIE_SECURE: ${DJANGO_CSRF_COOKIE_SECURE:-true}
-      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-true}
-      DJANGO_SECURE_HSTS_SECONDS: ${DJANGO_SECURE_HSTS_SECONDS:-3600}
-      DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: ${DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS:-true}
-      DJANGO_SECURE_HSTS_PRELOAD: ${DJANGO_SECURE_HSTS_PRELOAD:-true}
-      AZURE_REDIRECT_URI: ${AZURE_REDIRECT_URI}
-      DJANGO_SECRET: ${DJANGO_SECRET:-local-dev-insecure-secret}
-      POSTGRES_DB: ${POSTGRES_DB:-app}
-      POSTGRES_USER: ${POSTGRES_USER:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-      CACHE_URL: ${CACHE_URL}
       DJANGO_MIGRATE: "false"
       DJANGO_COLLECTSTATIC: "false"
       APP_ENV_FILE: /workspace/backend/.env
@@ -60,16 +43,12 @@ services:
     restart: always
     env_file:
       - ../backend/.env
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
