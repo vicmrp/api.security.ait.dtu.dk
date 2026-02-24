@@ -1,12 +1,12 @@
-from myview.models import ADGroupAssociation
+from myview.models import ADStaffSyncGroup
 
 
 
 class Command:
 
     def sync_ad_groups(self, *args, **options):
-        from myview.models import ADGroupAssociation
-        ADGroupAssociation.sync_ad_groups(None)
+        from myview.models import ADStaffSyncGroup
+        ADStaffSyncGroup.sync_ad_groups(None)
         print('done')
         return True
 
