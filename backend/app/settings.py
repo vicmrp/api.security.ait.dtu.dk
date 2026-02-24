@@ -368,16 +368,10 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
-    'sccm',
     'drf_yasg',
     'myview',
     'active_directory',
-    'misc',
-    # 'chatgpt_app',
     'graph',
-    # 'defender',
-    # 'hibp',
-    # 'hubcert',
 ]
 
 MIDDLEWARE = [
