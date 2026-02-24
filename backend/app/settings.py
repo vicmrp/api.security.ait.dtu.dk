@@ -373,11 +373,11 @@ INSTALLED_APPS = [
     'myview',
     'active_directory',
     'misc',
-    'chatgpt_app',
+    # 'chatgpt_app',
     'graph',
-    'defender',
-    'hibp',
-    'hubcert',
+    # 'defender',
+    # 'hibp',
+    # 'hubcert',
 ]
 
 MIDDLEWARE = [
