@@ -1,7 +1,7 @@
 
 from .views import BaseView
 from django.http import JsonResponse
-from .models import ADStaffSyncGroupup
+from .models import ADStaffSyncGroup
 from django.contrib.auth.models import User
 from active_directory.scripts.active_directory_query import active_directory_query
 from ldap3 import ALL_ATTRIBUTES
@@ -406,14 +406,14 @@ class AjaxView(BaseView):
                     if len(organizational_unit) != 1:
                         raise ValueError(f"No match found for the distinguished name:\n{distinguished_name}")
 
-                    ad_group_assoc, created = ADStaffSyncGroupup.objects.get_or_create(
+                    ad_group_assoc, created = ADStaffSyncGroup.objects.get_or_create(
                         canonical_name=organizational_unit[0]['canonicalName'][0],
                         distinguished_name=organizational_unit[0]['distinguishedName'][0]
                     )
 
 
                     # sync the created groups adusers members
-                    ADStaffSyncGroupup.sync_ad_group_members(ad_group_assoc)
+                    ADStaffSyncGroup.sync_ad_group_members(ad_group_assoc)
 
                     if created:
                         return JsonResponse({'success': 'New organizational unit created'}, status=201)

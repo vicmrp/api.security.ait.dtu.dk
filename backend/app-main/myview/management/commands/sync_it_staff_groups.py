@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from myview.models import ADStaffSyncGroupup
+from myview.models import ADStaffSyncGroup
 
 
 class Command(BaseCommand):
@@ -16,7 +16,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         parallelism = options["parallelism"]
         self.stdout.write(self.style.NOTICE("Starting IT Staff API group sync..."))
-        groups, errors, duration = ADStaffSyncGroupup.sync_it_staff_groups_from_settings(
+        groups, errors, duration = ADStaffSyncGroup.sync_it_staff_groups_from_settings(
             parallelism=parallelism
         )
         self.stdout.write(

@@ -4,7 +4,7 @@ from django.http import HttpRequest
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.contrib.admin.helpers import ActionForm
 from django.db import models
-from myview.models import ADStaffSyncGroupup
+from myview.models import ADStaffSyncGroup
 from django.contrib.contenttypes.models import ContentType
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -167,18 +167,18 @@ except ImportError:
 
     def sync_ad_group_members(modeladmin, request, queryset):
         for obj in queryset:
-            ADStaffSyncGroupup.sync_ad_group_members(obj)
+            ADStaffSyncGroup.sync_ad_group_members(obj)
         modeladmin.message_user(request, "Selected AD group members synced successfully.", messages.SUCCESS)
 
         sync_ad_group_members.short_description = "Sync selected AD group members"
 
-    @admin.register(ADStaffSyncGroupup)
-    class ADStaffSyncGroupupAdmin(admin.ModelAdmin):
+    @admin.register(ADStaffSyncGroup)
+    class ADStaffSyncGroupAdmin(admin.ModelAdmin):
         list_display = ('name', 'canonical_name', 'member_count')  # Fields to display in the admin list view
         readonly_fields = ('name', 'canonical_name', 'distinguished_name', 'member_count', 'member_summary')  # Fields that should be read-only in the admin
         list_per_page = 40
         actions = [sync_ad_group_members]
-        change_list_template = "admin/myview/ADStaffSyncGroupup/change_list.html"
+        change_list_template = "admin/myview/ADStaffSyncGroup/change_list.html"
         it_staff_base_dn = IT_STAFF_API_BASE_DN
 
 
@@ -224,7 +224,7 @@ except ImportError:
                 path(
                     'sync/',
                     self.admin_site.admin_view(self.sync_groups),
-                    name='myview_ADStaffSyncGroupup_sync',
+                    name='myview_ADStaffSyncGroup_sync',
                 ),
             ]
             return custom + urls
@@ -235,7 +235,7 @@ except ImportError:
 
             extra_context = extra_context or {}
             try:
-                extra_context['sync_url'] = reverse(f"{self.admin_site.name}:myview_ADStaffSyncGroupup_sync")
+                extra_context['sync_url'] = reverse(f"{self.admin_site.name}:myview_ADStaffSyncGroup_sync")
             except Exception:
                 extra_context['sync_url'] = None
             return super().changelist_view(request, extra_context=extra_context)
@@ -244,7 +244,7 @@ except ImportError:
             from django.utils.translation import gettext as _
 
             try:
-                synced_groups, errors, duration = ADStaffSyncGroupup.sync_it_staff_groups_from_settings()
+                synced_groups, errors, duration = ADStaffSyncGroup.sync_it_staff_groups_from_settings()
             except Exception as exc:  # noqa: BLE001
                 if show_message:
                     self.message_user(
@@ -283,7 +283,7 @@ except ImportError:
 
         def sync_groups(self, request):
             self._sync_it_staff_groups(request, show_message=True)
-            return redirect(reverse(f"{self.admin_site.name}:myview_ADStaffSyncGroupup_changelist"))
+            return redirect(reverse(f"{self.admin_site.name}:myview_ADStaffSyncGroup_changelist"))
 
         @staticmethod
         def _sync_group_members(group, canonical_name):
@@ -376,7 +376,7 @@ try:
             help_text="Select the limiter type to apply to selected endpoints.",
         )
         ad_groups = forms.ModelMultipleChoiceField(
-            queryset=ADStaffSyncGroupup.objects.none(),
+            queryset=ADStaffSyncGroup.objects.none(),
             required=False,
             label="AD groups",
             widget=FilteredSelectMultiple("AD groups", is_stacked=False),
@@ -392,7 +392,7 @@ try:
                     limiter_choices.append((str(obj.pk), obj.name))
             limiter_choices.append(("__none__", "<None> (clear limiter)"))
             self.fields['limiter_type'].choices = limiter_choices
-            self.fields['ad_groups'].queryset = ADStaffSyncGroupup.objects.all()
+            self.fields['ad_groups'].queryset = ADStaffSyncGroup.objects.all()
 
     @admin.register(Endpoint)
     class EndpointAdmin(admin.ModelAdmin):
@@ -446,7 +446,7 @@ try:
                     )
 
             if ad_group_ids:
-                groups = list(ADStaffSyncGroupup.objects.filter(pk__in=ad_group_ids))
+                groups = list(ADStaffSyncGroup.objects.filter(pk__in=ad_group_ids))
                 if groups:
                     endpoint_count = queryset.count()
                     for endpoint in queryset:
@@ -512,13 +512,13 @@ try:
                 
                 # get or create the group
                 try:
-                    ad_group_assoc, created = ADStaffSyncGroupup.objects.get_or_create(
+                    ad_group_assoc, created = ADStaffSyncGroup.objects.get_or_create(
                         canonical_name=group.canonical_name,
                         distinguished_name=group.distinguished_name,
                     )
                     print(created)
                 except Exception as e:
-                    print(f"Error creating ADStaffSyncGroupup: {e}")
+                    print(f"Error creating ADStaffSyncGroup: {e}")
                 # print ad_group_assoc creted true or false
                 
                 # add the group to the endpoint
@@ -529,7 +529,7 @@ try:
 
         def formfield_for_manytomany(self, db_field, request, **kwargs):
             if db_field.name == "ad_groups":
-                return self._custom_field_logic(db_field, request, ADStaffSyncGroupup, **kwargs)
+                return self._custom_field_logic(db_field, request, ADStaffSyncGroup, **kwargs)
             # elif db_field.name == "ad_organizational_units":
             #     return self._custom_field_logic(db_field, request, ADOrganizationalUnitAssociation, **kwargs)
             return super().formfield_for_manytomany(db_field, request, **kwargs)
@@ -539,7 +539,7 @@ try:
             associated_items = model_class.objects.filter(endpoints__isnull=False).distinct()
             
             for item in selected_items:
-                ad_group_assoc, created = ADStaffSyncGroupup.objects.get_or_create(
+                ad_group_assoc, created = ADStaffSyncGroup.objects.get_or_create(
                     cn=item['cn'][0],
                     canonical_name=item['canonicalName'][0],
                     defaults={'distinguished_name': item['distinguishedName'][0]}
@@ -579,7 +579,7 @@ try:
                 )
                 return None
 
-            groups = ADStaffSyncGroupup.objects.filter(pk__in=group_ids)
+            groups = ADStaffSyncGroup.objects.filter(pk__in=group_ids)
             if not groups.exists():
                 self.message_user(request, "No valid AD groups were selected.", level=messages.ERROR)
                 return None
@@ -734,7 +734,7 @@ try:
                     continue
 
                 # Ensure the base OU exists as a limiter
-                base_dn = ADStaffSyncGroupup._canonical_to_distinguished_name(base)
+                base_dn = ADStaffSyncGroup._canonical_to_distinguished_name(base)
                 if base_dn:
                     ADOrganizationalUnitLimiter.objects.update_or_create(
                         canonical_name=base,
@@ -742,7 +742,7 @@ try:
                     )
 
                 for child in children:
-                    dn = ADStaffSyncGroupup._canonical_to_distinguished_name(child)
+                    dn = ADStaffSyncGroup._canonical_to_distinguished_name(child)
                     if not dn:
                         errors.append(f"Failed to derive DN for {child}")
                         continue

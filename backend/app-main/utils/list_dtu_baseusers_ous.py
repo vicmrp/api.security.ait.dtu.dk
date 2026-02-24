@@ -3,12 +3,12 @@
 from django.conf import settings
 
 from active_directory.services import execute_active_directory_query
-from myview.models import ADStaffSyncGroupup
+from myview.models import ADStaffSyncGroup
 
 
 def _first_level_children(base_canonical: str) -> list[str]:
     base_canonical = base_canonical.rstrip('/')
-    base_dn = ADStaffSyncGroupup._canonical_to_distinguished_name(base_canonical)
+    base_dn = ADStaffSyncGroup._canonical_to_distinguished_name(base_canonical)
     if not base_dn:
         raise ValueError(f"Unable to convert {base_canonical} to a distinguished name")
 
@@ -28,7 +28,7 @@ def _first_level_children(base_canonical: str) -> list[str]:
         if not dn:
             continue
 
-        canonical = ADStaffSyncGroupup._dn_to_canonical(dn)
+        canonical = ADStaffSyncGroup._dn_to_canonical(dn)
         if not canonical:
             continue
         canonical = canonical.rstrip('/')

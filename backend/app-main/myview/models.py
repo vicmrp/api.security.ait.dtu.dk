@@ -367,7 +367,7 @@ class IPLimiter(BaseModel):
 
     ip_address = models.CharField(max_length=15)
     description = models.TextField(blank=True, default='')
-    ad_groups = models.ManyToManyField('ADStaffSyncGroupup', related_name='ip_limiters', blank=True)
+    ad_groups = models.ManyToManyField('ADStaffSyncGroup', related_name='ip_limiters', blank=True)
 
     class Meta:
         verbose_name = "IP Limiter"
@@ -398,7 +398,7 @@ class ADOrganizationalUnitLimiter(BaseModel):
     """This model represents an AD organizational unit limiter."""
     canonical_name = models.CharField(max_length=1024)
     distinguished_name = models.CharField(max_length=1024)
-    ad_groups = models.ManyToManyField('ADStaffSyncGroupup', related_name='ad_organizational_unit_limiters', blank=True)
+    ad_groups = models.ManyToManyField('ADStaffSyncGroup', related_name='ad_organizational_unit_limiters', blank=True)
 
     class Meta:
         verbose_name = "AD Organizational Unit Limiter"
@@ -461,7 +461,7 @@ class ADOrganizationalUnitLimiter(BaseModel):
                 continue
 
             try:
-                base_dn = ADStaffSyncGroupup._canonical_to_distinguished_name(canonical_prefix)
+                base_dn = ADStaffSyncGroup._canonical_to_distinguished_name(canonical_prefix)
             except Exception:
                 logger.exception('Failed to convert canonical prefix %s to distinguished name', canonical_prefix)
                 continue
@@ -509,7 +509,7 @@ class ADOrganizationalUnitLimiter(BaseModel):
                     continue
 
                 try:
-                    canonical_name = ADStaffSyncGroupup._dn_to_canonical(distinguished_name)
+                    canonical_name = ADStaffSyncGroup._dn_to_canonical(distinguished_name)
                 except Exception:
                     logger.exception('Failed to convert distinguished name %s to canonical form', distinguished_name)
                     continue
@@ -542,7 +542,7 @@ class ADOrganizationalUnitLimiter(BaseModel):
 
         return synced_limiters
 
-class ADStaffSyncGroupup(BaseModel):
+class ADStaffSyncGroup(BaseModel):
     """
     This model represents an association between an AD group and a Django user.
     """
@@ -555,7 +555,7 @@ class ADStaffSyncGroupup(BaseModel):
         return self.name or self.canonical_name
 
     class Meta:
-        verbose_name = "IT Staff API Permission (Django Data Model is ADStaffSyncGroupup)"
+        verbose_name = "IT Staff API Permission (Django Data Model is ADStaffSyncGroup)"
         verbose_name_plural = "IT Staff API Permissions"
 
     @staticmethod
@@ -648,9 +648,9 @@ class ADStaffSyncGroupup(BaseModel):
             if name and name.strip()
         ]
 
-        synced_groups: List['ADStaffSyncGroupup'] = []
+        synced_groups: List['ADStaffSyncGroup'] = []
         errors: List[str] = []
-        sync_targets: List[Tuple['ADStaffSyncGroupup', str]] = []
+        sync_targets: List[Tuple['ADStaffSyncGroup', str]] = []
 
         if not canonical_targets:
             return synced_groups, errors, 0.0
@@ -896,20 +896,20 @@ class ADStaffSyncGroupup(BaseModel):
         groups_to_add = ad_groups - current_associations
         groups_to_remove = current_associations - ad_groups
 
-        configured_base_dns = ADStaffSyncGroupup._normalize_base_dns(getattr(settings, 'AD_GROUP_SYNC_BASE_DNS', ()))
-        canonical_prefixes = [ADStaffSyncGroupup._dn_to_canonical_prefix(dn) for dn in configured_base_dns]
+        configured_base_dns = ADStaffSyncGroup._normalize_base_dns(getattr(settings, 'AD_GROUP_SYNC_BASE_DNS', ()))
+        canonical_prefixes = [ADStaffSyncGroup._dn_to_canonical_prefix(dn) for dn in configured_base_dns]
 
         # Add new group associations
         for group_dn in groups_to_add:
-            group = ADStaffSyncGroupup.objects.filter(distinguished_name=group_dn).first()
+            group = ADStaffSyncGroup.objects.filter(distinguished_name=group_dn).first()
             if not group:
-                canonical_name = ADStaffSyncGroupup._dn_to_canonical(group_dn)
-                if not ADStaffSyncGroupup._canonical_matches_prefixes(canonical_name, canonical_prefixes):
+                canonical_name = ADStaffSyncGroup._dn_to_canonical(group_dn)
+                if not ADStaffSyncGroup._canonical_matches_prefixes(canonical_name, canonical_prefixes):
                     continue
 
                 try:
                     with transaction.atomic():
-                        group, _ = ADStaffSyncGroupup.objects.update_or_create(
+                        group, _ = ADStaffSyncGroup.objects.update_or_create(
                             distinguished_name=group_dn,
                             defaults={'canonical_name': canonical_name},
                         )
@@ -929,7 +929,7 @@ class ADStaffSyncGroupup(BaseModel):
 
         # Remove all groups not associated with any endpoint
         if remove_groups_that_are_not_used_by_any_endpoint:
-            for group in ADStaffSyncGroupup.objects.all():
+            for group in ADStaffSyncGroup.objects.all():
                 if not group.endpoints.exists():
                     group.delete()
 
@@ -1079,7 +1079,7 @@ class ADStaffSyncGroupup(BaseModel):
 
     @staticmethod
     def delete_unused_groups():
-        unused_ad_groups = ADStaffSyncGroupup.objects.filter(endpoints__isnull=True)
+        unused_ad_groups = ADStaffSyncGroup.objects.filter(endpoints__isnull=True)
         unused_ad_groups.delete()
 
   
@@ -1317,7 +1317,7 @@ class LimiterType(models.Model):
 class Endpoint(BaseModel):
     path = models.CharField(max_length=255, unique=True)
     method = models.CharField(max_length=6, blank=True, default='')
-    ad_groups = models.ManyToManyField('ADStaffSyncGroupup', related_name='endpoints', blank=True)
+    ad_groups = models.ManyToManyField('ADStaffSyncGroup', related_name='endpoints', blank=True)
     limiter_type = models.ForeignKey(LimiterType, on_delete=models.CASCADE, null=True, blank=True)
     
 

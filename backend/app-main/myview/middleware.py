@@ -19,7 +19,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework import exceptions
 
 from .limiter_handlers import limiter_registry
-from .models import ADStaffSyncGroupup, APIRequestLog, Endpoint
+from .models import ADStaffSyncGroup, APIRequestLog, Endpoint
 from .models import APIRequestLog, Endpoint
 from utils.authentication import AzureAdTokenAuthentication
 
@@ -283,7 +283,7 @@ class AccessControlMiddleware(MiddlewareMixin):
 
         cache_key = f"user_ad_groups_{user.id}"
 
-        ADStaffSyncGroupup.sync_user_ad_groups_cached(
+        ADStaffSyncGroup.sync_user_ad_groups_cached(
             username=user.username,
             max_age_seconds=getattr(settings, "AD_GROUP_CACHE_TIMEOUT", 15 * 60),
             block=False,
@@ -324,7 +324,7 @@ class AccessControlMiddleware(MiddlewareMixin):
 
         try:
             sync_start = time.monotonic()
-            scheduled = ADStaffSyncGroupup.sync_user_ad_groups_cached(
+            scheduled = ADStaffSyncGroup.sync_user_ad_groups_cached(
                 username=request.user.username,
                 max_age_seconds=max_age,
                 force=False,
@@ -515,7 +515,7 @@ class AccessControlMiddleware(MiddlewareMixin):
         sync_triggered = False
 
         try:
-            sync_triggered = ADStaffSyncGroupup.ensure_groups_synced_cached(block=block_sync)
+            sync_triggered = ADStaffSyncGroup.ensure_groups_synced_cached(block=block_sync)
         except Exception:  # pragma: no cover - defensive logging
             logger.warning("AccessControl AD group sync failed", exc_info=True)
             return

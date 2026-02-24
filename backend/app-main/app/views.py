@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_GET
 from msal import ConfidentialClientApplication
-from myview.models import ADStaffSyncGroupup, UserLoginLog
+from myview.models import ADStaffSyncGroup, UserLoginLog
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +258,7 @@ def msal_callback(request):
             user.backend = 'django.contrib.auth.backends.ModelBackend'
 
             # Sync user AD groups (force on login to ensure fresh membership)
-            ADStaffSyncGroupup.sync_user_ad_groups_cached(
+            ADStaffSyncGroup.sync_user_ad_groups_cached(
                 username=user.username,
                 force=True,
             )
@@ -266,14 +266,14 @@ def msal_callback(request):
             required_groups = getattr(settings, 'IT_STAFF_API_GROUP_CANONICAL_NAMES', ())
             has_required_group = True
             if required_groups:
-                has_required_group = ADStaffSyncGroupup.objects.filter(
+                has_required_group = ADStaffSyncGroup.objects.filter(
                     canonical_name__in=required_groups,
                     members=user,
                 ).exists()
 
             if not has_required_group:
                 configured_groups = list(
-                    ADStaffSyncGroupup.objects.filter(
+                    ADStaffSyncGroup.objects.filter(
                         canonical_name__in=required_groups
                     ).values_list('name', flat=True)
                 )
@@ -390,7 +390,7 @@ def msal_director(request):
         HttpResponseRedirect('/myview/only-allowed-for-it-staff/')
 
     except ImportError:
-        print("ADStaffSyncGroupup model is not available for registration in the admin site.")
+        print("ADStaffSyncGroup model is not available for registration in the admin site.")
         HttpResponseRedirect('/myview/only-allowed-for-it-staff/') 
 
 def msal_login(request):
