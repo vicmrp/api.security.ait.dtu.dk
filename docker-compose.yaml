@@ -1,0 +1,96 @@
+services:
+  web:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SETTINGS_MODULE: app.settings
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_SECRET: ${DJANGO_SECRET:-please-change-me}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api.security.ait.dtu.dk}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1,https://api.security.ait.dtu.dk}
+      DJANGO_CSRF_COOKIE_DOMAIN: ${DJANGO_CSRF_COOKIE_DOMAIN:-}
+      DJANGO_SESSION_COOKIE_SECURE: ${DJANGO_SESSION_COOKIE_SECURE:-true}
+      DJANGO_CSRF_COOKIE_SECURE: ${DJANGO_CSRF_COOKIE_SECURE:-true}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-false}
+      DJANGO_SECURE_HSTS_SECONDS: ${DJANGO_SECURE_HSTS_SECONDS:-3600}
+      DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: ${DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS:-true}
+      DJANGO_SECURE_HSTS_PRELOAD: ${DJANGO_SECURE_HSTS_PRELOAD:-true}
+      DJANGO_STATIC_ROOT: /data/static
+      DJANGO_MEDIA_ROOT: /data/media
+      DJANGO_WAIT_FOR_DB: ${DJANGO_WAIT_FOR_DB:-true}
+      DJANGO_MIGRATE: ${DJANGO_MIGRATE:-true}
+      DJANGO_COLLECTSTATIC: ${DJANGO_COLLECTSTATIC:-true}
+      SERVICE_FQDN_WEB: ${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}
+      SERVICE_URL_WEB: ${SERVICE_URL_WEB:-https://api.security.ait.dtu.dk}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-please-change-me}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      ACTIVE_DIRECTORY_USERNAME: ${ACTIVE_DIRECTORY_USERNAME:-}
+      ACTIVE_DIRECTORY_SERVER: ${ACTIVE_DIRECTORY_SERVER:-ldaps://win.dtu.dk}
+      ACTIVE_DIRECTORY_PASSWORD: ${ACTIVE_DIRECTORY_PASSWORD:-}
+      AIT_SOC_MSAL_VICRE_CLIENT_ID: ${AIT_SOC_MSAL_VICRE_CLIENT_ID:-}
+      AIT_SOC_MSAL_VICRE_MSAL_SECRET_VALUE: ${AIT_SOC_MSAL_VICRE_MSAL_SECRET_VALUE:-}
+      AIT_SOC_MSAL_VICRE_AUTHORITY: ${AIT_SOC_MSAL_VICRE_AUTHORITY:-https://login.microsoftonline.com/}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+      GRAPH_RESOURCE: ${GRAPH_RESOURCE:-https://graph.microsoft.com}
+      GRAPH_GRANT_TYPE: ${GRAPH_GRANT_TYPE:-client_credentials}
+      DEFENDER_CLIENT_ID: ${DEFENDER_CLIENT_ID:-}
+      DEFENDER_CLIENT_SECRET: ${DEFENDER_CLIENT_SECRET:-}
+      DEFENDER_RESSOURCE: ${DEFENDER_RESSOURCE:-https://api.securitycenter.microsoft.com}
+      DEFENDER_GRANT_TYPE: ${DEFENDER_GRANT_TYPE:-client_credentials}
+      DJANGO_ADMIN_USERNAME: ${DJANGO_ADMIN_USERNAME:-}
+      DJANGO_ADMIN_PASSWORD: ${DJANGO_ADMIN_PASSWORD:-}
+    volumes:
+      - static_data:/data/static
+      - media_data:/data/media
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-coolify}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.rule=Host(`${SERVICE_FQDN_WEB:-api.security.ait.dtu.dk}`)
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.entrypoints=websecure
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.tls=true
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-api_security}.service=${TRAEFIK_SERVICE_NAME:-api_security}
+      - traefik.http.services.${TRAEFIK_SERVICE_NAME:-api_security}.loadbalancer.server.port=8121
+    networks:
+      - internal
+      - proxy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-please-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+  proxy:
+    name: ${TRAEFIK_NETWORK:-coolify}
+    external: ${TRAEFIK_NETWORK_EXTERNAL:-true}
+
+volumes:
+  postgres_data:
+  static_data:
+  media_data:

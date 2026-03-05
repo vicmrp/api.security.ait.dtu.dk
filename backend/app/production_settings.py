@@ -24,7 +24,11 @@ from termcolor import colored
 # Paths used to discover the compose file and optional helper data directories.
 APP_MAIN_DIR = Path(__file__).resolve().parents[1]
 BACKEND_DIR = APP_MAIN_DIR.parent
-COMPOSE_PATH = BACKEND_DIR / "docker-compose.coolify.yaml"
+COMPOSE_PATH_CANDIDATES = [
+    BACKEND_DIR / "docker-compose.coolify.yaml",
+    BACKEND_DIR.parent / "docker-compose.yaml",
+]
+COMPOSE_PATH = next((candidate for candidate in COMPOSE_PATH_CANDIDATES if candidate.exists()), COMPOSE_PATH_CANDIDATES[0])
 ENV_FILE_CANDIDATES = [
     BACKEND_DIR / ".env",
     BACKEND_DIR / ".devcontainer" / ".env",
