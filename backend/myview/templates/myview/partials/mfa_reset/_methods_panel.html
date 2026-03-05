@@ -1,0 +1,71 @@
+{% load i18n %}
+{% if authentication_methods %}
+    <div class="mb-4">
+        {% if has_deletable_methods and bulk_delete_form %}
+            <form method="post" class="mb-2" id="bulk-delete-form" data-selected-upn="{{ selected_user_principal_name }}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_all">
+                {{ bulk_delete_form.user_principal_name }}
+                <button
+                    type="submit"
+                    class="btn btn-danger btn-lg w-100 d-flex justify-content-center align-items-center gap-2"
+                    id="bulk-delete-button"
+                    data-confirm-template="{% trans 'Reset all removable MFA methods for {upn}? This action cannot be undone.' %}"
+                >
+                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="bulk-delete-spinner"></span>
+                    <span data-default-label>{% trans "Reset all MFA methods" %}</span>
+                    <span class="d-none" data-loading-label>{% trans "Resetting MFA methods..." %}</span>
+                </button>
+            </form>
+            <div id="bulk-delete-status" class="alert d-none" role="alert"></div>
+        {% else %}
+            <div class="alert alert-warning mb-2" role="alert">
+                {% trans "No removable authentication methods are available for bulk reset." %}
+            </div>
+        {% endif %}
+        <button class="btn btn-outline-secondary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#advancedOptions" aria-expanded="false" aria-controls="advancedOptions">
+            {% trans "Advanced options" %}
+        </button>
+    </div>
+
+    <div class="collapse" id="advancedOptions">
+        <div class="card card-body border-0 p-0">
+            <p class="text-muted px-2 pt-2">{% trans "Use the controls below to remove individual authentication methods." %}</p>
+            <div class="row row-cols-1 g-3 px-2 pb-2" id="cards-container">
+                {% for method in authentication_methods %}
+                    <div class="col">
+                        <div class="card h-100 auth-method-card">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ method.type_label }}</h5>
+                                <dl class="row mb-0">
+                                    {% for key, value in method.details %}
+                                        <dt class="col-sm-4">{{ key }}</dt>
+                                        <dd class="col-sm-8">{{ value }}</dd>
+                                    {% endfor %}
+                                </dl>
+                            </div>
+                            <div class="card-footer bg-transparent">
+                                {% if method.can_delete %}
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="user_principal_name" value="{{ selected_user_principal_name }}">
+                                        <input type="hidden" name="method_id" value="{{ method.id }}">
+                                        <input type="hidden" name="method_type" value="{{ method.type_key }}">
+                                        <button type="submit" class="btn btn-danger btn-sm">{% trans "Remove" %}</button>
+                                    </form>
+                                {% else %}
+                                    <span class="text-muted">{% trans "Removal not supported for this method." %}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+{% elif selected_user_principal_name and no_methods %}
+    <div class="alert alert-info" role="alert">
+        {% blocktrans with upn=selected_user_principal_name %}No authentication methods found for {{ upn }}.{% endblocktrans %}
+    </div>
+{% endif %}

@@ -13,10 +13,7 @@ services:
       - ../backend/.env
     restart: always
     tty: true
-    working_dir: /workspace/backend/app-main
-    depends_on:
-      db:
-        condition: service_healthy
+    working_dir: /workspace/backend
     environment:
       DEVCONTAINER_DEFAULT_CWD: /workspace
       DEVCONTAINER_SYNC_UID_GID: "1"
@@ -25,6 +22,7 @@ services:
       DJANGO_MEDIA_ROOT: /data/media
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      DJANGO_WAIT_FOR_DB: "false"
       DJANGO_MIGRATE: "false"
       DJANGO_COLLECTSTATIC: "false"
       APP_ENV_FILE: /workspace/backend/.env
@@ -35,20 +33,6 @@ services:
     networks:
       - internal
 
-  db:
-    image: postgres:16
-    restart: always
-    env_file:
-      - ../backend/.env
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 
 networks:
@@ -56,8 +40,7 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
-    driver: local
+
   static_data:
     driver: local
   media_data:

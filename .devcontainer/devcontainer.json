@@ -11,22 +11,12 @@
     "customizations": {
         "vscode": {
             "settings": {
-                "python.defaultInterpreterPath": "/usr/src/venvs/app-main/bin/python"
+                "python.defaultInterpreterPath": "/usr/local/bin/python"
             },
             "extensions": [
                 "ms-python.python",
                 "openai.chatgpt"
             ]
         }
-    },
-    // This command is executed after the container is created but before it is started for the first time. 
-    // It's useful for setup tasks that only need to be run once after the container is initially created, such as installing software,
-    // configuring settings, or performing initial setup tasks that don't need to be repeated on subsequent starts of the container.
-    // This command will not run again on container restarts unless the container is fully recreated.
-    "postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
-    // postStartCommand: This command is executed every time the container is started,
-    // including the first time after it's created and any subsequent restarts. 
-    // This is suitable for tasks that need to be run every time the container starts, such as setting environment variables, 
-    // starting background services, or running scripts that prepare the environment for the development session.
-    "postStartCommand": "bash .devcontainer/postStartCommand.sh"
+    }
 }

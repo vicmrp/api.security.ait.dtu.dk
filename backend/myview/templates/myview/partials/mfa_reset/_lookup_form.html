@@ -1,0 +1,25 @@
+{% load i18n %}
+<form method="post" class="mb-4">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="lookup">
+    <div class="mb-3">
+        {% with field=lookup_form.user_principal_name %}
+            <label for="{{ field.id_for_label }}" class="form-label">
+                {{ field.label }}
+                <i class="bi bi-question-circle-fill"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="right"
+                    data-bs-html="true"
+                    title="userPrincipalName&lt;br&gt; vicre-test01@dtudk.onmicrosoft.com &lt;br&gt; vicre@dtu.dk"></i>
+            </label>
+            {{ field }}
+            {% if field.errors %}
+                <div class="invalid-feedback d-block">{{ field.errors|striptags }}</div>
+            {% endif %}
+            {% if field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+            {% endif %}
+        {% endwith %}
+    </div>
+    <button type="submit" class="btn btn-primary">{% trans "Submit" %}</button>
+</form>

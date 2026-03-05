@@ -1,0 +1,73 @@
+{% load i18n %}
+<section class="alert alert-secondary mb-4" role="region" aria-label="{% trans 'MFA reset audit visibility' %}">
+    <h5 class="mb-2">{% trans "MFA reset visibility" %}</h5>
+    <p class="mb-0">
+        {% trans "All authenticated users can see the complete MFA reset history. Every reset is logged with who performed it and when." %}
+    </p>
+</section>
+
+<section class="alert alert-primary mb-4" role="region" aria-label="{% trans 'My MFA reset access summary' %}">
+    <h5 class="mb-2">{% trans "My MFA reset access" %}</h5>
+    <dl class="row mb-0">
+        <dt class="col-sm-4">{% trans "Signed in as" %}</dt>
+        <dd class="col-sm-8 mb-2">{{ actor_user_principal_name|default:user.email|default:user.username }}</dd>
+
+        <dt class="col-sm-4">{% trans "Access mode" %}</dt>
+        <dd class="col-sm-8 mb-2">
+            {% if actor_access_mode == "superuser" %}
+                {% trans "Superuser override (all scopes)." %}
+            {% elif actor_access_mode == "scoped" %}
+                {% trans "Scoped MFA reset access." %}
+            {% else %}
+                {% trans "Read-only (no reset scope assignment found)." %}
+            {% endif %}
+        </dd>
+
+        <dt class="col-sm-4">{% trans "Your scopes" %}</dt>
+        <dd class="col-sm-8 mb-0">
+            {% if actor_access_mode == "superuser" %}
+                <span class="badge text-bg-success me-1">{% trans "ALL SCOPES" %}</span>
+            {% elif actor_scope_codes %}
+                {% for scope_code in actor_scope_codes %}
+                    <span class="badge text-bg-info me-1">{{ scope_code }}</span>
+                {% endfor %}
+            {% else %}
+                <span class="text-muted">{% trans "No scopes detected from AD group metadata." %}</span>
+            {% endif %}
+        </dd>
+    </dl>
+</section>
+
+<section class="alert alert-light border mb-4" role="region" aria-label="{% trans 'How authentication and scope access works' %}">
+    <h5 class="mb-2">{% trans "How authentication and MFA scope access works" %}</h5>
+    <ol class="mb-0 ps-3">
+        <li>{% trans "You authenticate with Microsoft Entra ID. The app stores your userPrincipalName in the session." %}</li>
+        <li>
+            {% blocktrans with scope_attribute=mfa_scope_attribute %}
+                The app reads your AD group membership (including nested groups) and collects scope codes from the group attribute {{ scope_attribute }}.
+            {% endblocktrans %}
+        </li>
+        <li>{% trans "For the target user, the scope is derived from the OU below OU=DTUBaseUsers in onPremisesDistinguishedName." %}</li>
+        <li>{% trans "Reset is allowed when target scope matches one of your scopes (or when superuser override is active). Every reset is audited." %}</li>
+    </ol>
+</section>
+
+<section class="alert alert-info mb-4" role="region" aria-label="{% trans 'MFA reset scope access details' %}">
+    <h5 class="mb-2">{% trans "MFA reset scope details" %}</h5>
+    {% if actor_scope_codes %}
+        <p class="mb-1">
+            {% blocktrans with scope_list=actor_scope_codes|join:", " %}
+                You can reset MFA for users in these DTUBaseUsers scopes: {{ scope_list }}.
+            {% endblocktrans %}
+        </p>
+        <p class="mb-0">
+            {% blocktrans with scope_attribute=mfa_scope_attribute %}
+                Scope is synced from your MFAResetAdmins AD group metadata (comma-separated values in {{ scope_attribute }}).
+            {% endblocktrans %}
+        </p>
+    {% else %}
+        <p class="mb-0">
+            {% trans "No MFA reset scope was found for your account in AD. You can sign in and view audit history, but reset actions are blocked." %}
+        </p>
+    {% endif %}
+</section>

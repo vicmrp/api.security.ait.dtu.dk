@@ -47,7 +47,7 @@ RUN groupadd --system django \
 WORKDIR /app
 
 # Install Python dependencies once in the base layer.
-COPY app-main/requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 RUN python -m pip install --upgrade pip \
     && pip install --no-cache-dir -r /tmp/requirements.txt
 
@@ -83,7 +83,7 @@ WORKDIR /app
 COPY . /app
 RUN chown -R django:django /app
 
-WORKDIR /app/app-main
+WORKDIR /app
 EXPOSE 8121
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

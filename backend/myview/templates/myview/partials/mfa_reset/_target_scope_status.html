@@ -1,0 +1,23 @@
+{% load i18n %}
+{% if selected_user_principal_name %}
+    <div class="user-principal-info p-3 mb-3 bg-light border rounded">
+        <strong>{% trans "Results for" %}:</strong> {{ selected_user_principal_name }}
+    </div>
+    <div class="alert {% if target_in_scope %}alert-success{% else %}alert-warning{% endif %} mb-3" role="status">
+        {% if target_scope_code %}
+            {% if target_in_scope %}
+                {% blocktrans with target_scope=target_scope_code %}
+                    Target user scope: {{ target_scope }}. MFA reset is allowed.
+                {% endblocktrans %}
+            {% else %}
+                {% blocktrans with target_scope=target_scope_code %}
+                    Target user scope: {{ target_scope }}. MFA reset is blocked because this scope is outside your assignment.
+                {% endblocktrans %}
+            {% endif %}
+        {% elif is_superuser and target_in_scope %}
+            {% trans "Target user scope could not be determined from AD, but superuser override allows MFA reset." %}
+        {% else %}
+            {% trans "Target user scope could not be determined from AD, so MFA reset is blocked." %}
+        {% endif %}
+    </div>
+{% endif %}

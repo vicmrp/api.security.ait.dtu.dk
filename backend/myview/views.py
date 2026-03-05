@@ -130,12 +130,36 @@ class BaseView(View):
         mfa_reset_admins_base_dn = str(getattr(settings, "MFA_RESET_ADMINS_BASE_DN", "") or "").strip()
         mfa_reset_admins_base_dn_lower = mfa_reset_admins_base_dn.lower()
 
-        scope_codes: set[str] = set()
+        def _first_dn(entry: dict) -> str:
+            if not isinstance(entry, dict):
+                return ""
+
+            dn_values = self._coerce_list(
+                entry.get("distinguishedName") or entry.get("distinguishedname")
+            )
+            for value in dn_values:
+                dn = str(value).strip()
+                if dn:
+                    return dn
+            return ""
+
+        def _dn_matches_admin_base(dn: str) -> bool:
+            if not mfa_reset_admins_base_dn_lower:
+                return True
+
+            dn_lower = dn.lower()
+            return (
+                dn_lower == mfa_reset_admins_base_dn_lower
+                or dn_lower.endswith(f",{mfa_reset_admins_base_dn_lower}")
+            )
+
+        actor_dn = ""
+        direct_member_dns_all: set[str] = set()
         try:
             user_entries = execute_active_directory_query(
                 base_dn=base_dn,
                 search_filter=f"(userPrincipalName={escape_filter_chars(actor_upn)})",
-                search_attributes=["memberOf"],
+                search_attributes=["distinguishedName", "memberOf"],
                 limit=1,
                 excluded_attributes=["thumbnailPhoto"],
             )
@@ -143,28 +167,29 @@ class BaseView(View):
             logger.warning("Failed to load actor scope groups for %s: %s", actor_upn, exc)
             user_entries = []
 
+        group_entries: list[dict] = []
+        transitive_group_count = 0
+        transitive_group_count_after_filter = 0
+
         if isinstance(user_entries, list) and user_entries:
+            actor_entry = user_entries[0] if isinstance(user_entries[0], dict) else {}
+            actor_dn = _first_dn(actor_entry)
+
             member_of_values = self._coerce_list(
-                user_entries[0].get("memberOf") or user_entries[0].get("memberof")
+                actor_entry.get("memberOf") or actor_entry.get("memberof")
             )
-            member_dns = sorted(
-                {
-                    str(dn).strip()
-                    for dn in member_of_values
-                    if str(dn).strip()
-                }
-            )
+            direct_member_dns_all = {
+                str(dn).strip()
+                for dn in member_of_values
+                if str(dn).strip()
+            }
 
-            if mfa_reset_admins_base_dn_lower:
-                member_dns = [
-                    dn
-                    for dn in member_dns
-                    if dn.lower() == mfa_reset_admins_base_dn_lower
-                    or dn.lower().endswith(f",{mfa_reset_admins_base_dn_lower}")
+            direct_member_dns = sorted(dn for dn in direct_member_dns_all if _dn_matches_admin_base(dn))
+            if direct_member_dns:
+                filter_clauses = [
+                    f"(distinguishedName={escape_filter_chars(dn)})"
+                    for dn in direct_member_dns
                 ]
-
-            if member_dns:
-                filter_clauses = [f"(distinguishedName={escape_filter_chars(dn)})" for dn in member_dns]
                 group_filter = (
                     filter_clauses[0]
                     if len(filter_clauses) == 1
@@ -172,7 +197,7 @@ class BaseView(View):
                 )
 
                 try:
-                    group_entries = execute_active_directory_query(
+                    group_entries_raw = execute_active_directory_query(
                         base_dn=base_dn,
                         search_filter=group_filter,
                         search_attributes=["distinguishedName", scope_attribute],
@@ -184,11 +209,70 @@ class BaseView(View):
                         actor_upn,
                         exc,
                     )
-                    group_entries = []
+                    direct_group_entries = []
+                else:
+                    direct_group_entries = group_entries_raw if isinstance(group_entries_raw, list) else []
 
-                if isinstance(group_entries, list):
-                    for entry in group_entries:
-                        scope_codes.update(self._extract_scope_codes_from_group_entry(entry, scope_attribute))
+                group_entries.extend(
+                    entry for entry in direct_group_entries if isinstance(entry, dict)
+                )
+
+        if actor_dn:
+            transitive_group_filter = (
+                "(&(objectClass=group)"
+                f"(member:1.2.840.113556.1.4.1941:={escape_filter_chars(actor_dn)}))"
+            )
+            try:
+                transitive_entries_raw = execute_active_directory_query(
+                    base_dn=base_dn,
+                    search_filter=transitive_group_filter,
+                    search_attributes=["distinguishedName", scope_attribute],
+                    excluded_attributes=["thumbnailPhoto"],
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "Failed to load transitive MFA reset scope groups for %s: %s",
+                    actor_upn,
+                    exc,
+                )
+                transitive_entries_raw = []
+
+            if isinstance(transitive_entries_raw, list):
+                transitive_group_count = len(transitive_entries_raw)
+                for entry in transitive_entries_raw:
+                    if not isinstance(entry, dict):
+                        continue
+
+                    group_dn = _first_dn(entry)
+                    if group_dn and _dn_matches_admin_base(group_dn):
+                        group_entries.append(entry)
+                        transitive_group_count_after_filter += 1
+
+        scope_codes: set[str] = set()
+        seen_dns: set[str] = set()
+        for entry in group_entries:
+            group_dn = _first_dn(entry)
+            if group_dn:
+                seen_dns.add(group_dn.lower())
+            scope_codes.update(self._extract_scope_codes_from_group_entry(entry, scope_attribute))
+
+        if not scope_codes:
+            logger.info(
+                (
+                    "No MFA reset scopes found for %s. "
+                    "direct_groups=%d direct_groups_after_filter=%d "
+                    "transitive_groups=%d transitive_groups_after_filter=%d "
+                    "distinct_groups_considered=%d scope_attribute=%s admins_base_dn=%s"
+                ),
+                actor_upn,
+                len(direct_member_dns_all),
+                len([dn for dn in direct_member_dns_all if _dn_matches_admin_base(dn)]),
+                transitive_group_count,
+                transitive_group_count_after_filter,
+                len(seen_dns),
+                scope_attribute,
+                mfa_reset_admins_base_dn or "<none>",
+            )
 
         sorted_codes = sorted(scope_codes)
         session[cache_key] = sorted_codes
@@ -440,6 +524,14 @@ class BaseView(View):
     def get_context_data(self, **kwargs):
         branch, commit, last_updated = self.get_git_info()
         actor_scope_codes = sorted(self._get_actor_scope_codes())
+        actor_upn = self._actor_user_principal_name()
+        if self.request.user.is_superuser:
+            actor_access_mode = "superuser"
+        elif actor_scope_codes:
+            actor_access_mode = "scoped"
+        else:
+            actor_access_mode = "read_only"
+
         return {
             "base_template": self.base_template,
             "git_branch": branch,
@@ -448,6 +540,12 @@ class BaseView(View):
             "is_superuser": self.request.user.is_superuser,
             "user_has_mfa_reset_access": self.user_has_mfa_reset_access(),
             "actor_scope_codes": actor_scope_codes,
+            "actor_user_principal_name": actor_upn,
+            "actor_access_mode": actor_access_mode,
+            "mfa_scope_attribute": str(
+                getattr(settings, "MFA_RESET_SCOPE_ATTRIBUTE", "extensionAttribute1")
+                or "extensionAttribute1"
+            ).strip(),
             "debug": settings.DEBUG,
         }
 
@@ -786,6 +884,49 @@ class MFAResetPageView(BaseView):
         query = urlencode({"userPrincipalName": user_principal_name})
         return redirect(f"{reverse('mfa-reset')}?{query}")
 
+    @staticmethod
+    def _deletable_methods_only(methods):
+        if not isinstance(methods, list):
+            return []
+        return [method for method in methods if isinstance(method, dict) and method.get("can_delete")]
+
+    def _verify_remaining_methods_after_bulk_delete(self, user_principal_name):
+        max_attempts_raw = getattr(settings, "MFA_RESET_BULK_VERIFY_MAX_ATTEMPTS", 4)
+        wait_seconds_raw = getattr(settings, "MFA_RESET_BULK_VERIFY_WAIT_SECONDS", 1.0)
+
+        try:
+            max_attempts = max(1, int(max_attempts_raw or 4))
+        except (TypeError, ValueError):
+            max_attempts = 4
+
+        try:
+            wait_seconds = max(0.0, float(wait_seconds_raw or 1.0))
+        except (TypeError, ValueError):
+            wait_seconds = 1.0
+
+        remaining_methods = []
+        remaining_deletable_methods = []
+        remaining_error = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                remaining_raw = self._fetch_authentication_methods(user_principal_name)
+                remaining_methods = self._transform_methods(remaining_raw)
+                remaining_deletable_methods = self._deletable_methods_only(remaining_methods)
+                remaining_error = None
+            except GraphAPIError as exc:  # pragma: no cover - defensive
+                remaining_error = str(exc)
+                if attempt == max_attempts:
+                    break
+            else:
+                if not remaining_deletable_methods:
+                    return remaining_methods, remaining_deletable_methods, attempt, None
+
+            if attempt < max_attempts and wait_seconds > 0:
+                time.sleep(wait_seconds)
+
+        return remaining_methods, remaining_deletable_methods, max_attempts, remaining_error
+
     def _handle_delete_all(self, request):
         is_ajax = request.headers.get("X-Requested-With", "").lower() == "xmlhttprequest"
         form = self.bulk_delete_form_class(request.POST)
@@ -892,13 +1033,9 @@ class MFAResetPageView(BaseView):
                     details=str(exc),
                 )
 
-        remaining_methods = []
-        remaining_error = None
-        try:
-            remaining_raw = self._fetch_authentication_methods(user_principal_name)
-            remaining_methods = self._transform_methods(remaining_raw)
-        except GraphAPIError as exc:  # pragma: no cover - defensive
-            remaining_error = str(exc)
+        remaining_methods, remaining_deletable_methods, verification_attempts, remaining_error = (
+            self._verify_remaining_methods_after_bulk_delete(user_principal_name)
+        )
 
         if successes:
             self._log_reset_record(
@@ -923,17 +1060,41 @@ class MFAResetPageView(BaseView):
                 "Some authentication methods could not be removed: " + " ; ".join(failure_messages),
             )
 
+        pending_message = None
+        if remaining_deletable_methods and not failures:
+            pending_labels = sorted(
+                {
+                    str(method.get("type_label") or method.get("type_key") or "Unknown method")
+                    for method in remaining_deletable_methods
+                    if isinstance(method, dict)
+                }
+            )
+            pending_message = (
+                "Delete requests were accepted, but Microsoft Graph is still reporting these removable methods: "
+                + ", ".join(pending_labels)
+                + ". The page will refresh and verify again."
+            )
+
+            if not is_ajax:
+                messages.warning(request, pending_message)
+
         if is_ajax:
             response_payload = {
                 "success": not failures,
                 "deleted_methods": unique_success_labels,
                 "failures": [{"label": label, "error": error} for label, error in failures],
                 "remaining_methods": remaining_methods,
+                "remaining_deletable_methods": remaining_deletable_methods,
+                "pending": bool(remaining_deletable_methods),
+                "verification_attempts": verification_attempts,
             }
             if remaining_error:
                 response_payload["remaining_error"] = remaining_error
             if not failures:
-                response_payload.setdefault("message", "All removable authentication methods were deleted.")
+                response_payload.setdefault(
+                    "message",
+                    pending_message or "All removable authentication methods were deleted.",
+                )
             return JsonResponse(response_payload)
 
         query = urlencode({"userPrincipalName": user_principal_name})
